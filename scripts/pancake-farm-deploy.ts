@@ -4,7 +4,7 @@ const main = async () => {
   const SousChefFactory = await ethers.getContractFactory("SousChef");
 
   const sousChef = await SousChefFactory.deploy(
-    "0xB32Fa5d2c09c127130B0ba61F0cd15eC283A8fc0",
+    "0x51514058C31be38068B4781460F31AB9006bDE0A",
     ethers.parseEther("1"),
     1717876,
     1933876,
