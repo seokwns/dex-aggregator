@@ -12,7 +12,7 @@ const config: HardhatUserConfig = {
     endurance: {
       url: "https://endurance2-rpc-partner.archivenode.club/",
       chainId: 648,
-      accounts: [ENDURANCE_DEPLOYER!],
+      accounts: [ENDURANCE_DEPLOYER!, TEST_1!],
     },
     kairos: {
       chainId: 1001,
