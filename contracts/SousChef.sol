@@ -125,7 +125,7 @@ contract SousChef {
 
     // Deposit churu tokens to SousChef for Reward allocation.
     function deposit(uint256 _amount) public {
-        require (_amount > 0, 'amount 0');
+        // require (_amount > 0, 'amount 0');
         UserInfo storage user = userInfo[msg.sender];
         updatePool();
         churu.safeTransferFrom(address(msg.sender), address(this), _amount);
