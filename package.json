@@ -12,6 +12,7 @@
     "@nomicfoundation/hardhat-network-helpers": "^1.0.12",
     "@nomicfoundation/hardhat-verify": "^2.0.0",
     "@nomicfoundation/ignition-core": "^0.15.7",
+    "@openzeppelin/contracts": "3.2.0",
     "@pancakeswap/pancake-swap-lib": "^0.0.4",
     "@typechain/ethers-v6": "^0.5.1",
     "@typechain/hardhat": "^9.1.0",
