@@ -5,17 +5,20 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract ChuruToken is ERC20("CatalistDex Token", "CHURU"), Ownable {
-    /// @notice Creates `_amount` token to `_to`. Must only be called by the owner (MasterChef).
-    function mint(address _to, uint256 _amount) public onlyOwner {
-        _mint(_to, _amount);
-        _moveDelegates(address(0), _delegates[_to], _amount);
+    address public BURNER = 0x000000000000000000000000000000000000dEaD;
+    uint256 public TOTAL_SUPPLY = 1e18 * 1000000000;
+
+    function transfer(address recipient, uint256 amount) public virtual override returns (bool) {
+        if (recipient == DEX_ADDRESS) {
+            _transfer(_msgSender(), BURNER, amount / 10);
+            _transfer(_msgSender(), recipient, (amount * 9) / 10);
+        } else {
+            _transfer(_msgSender(), recipient, amount);
+        }
+        return true;
     }
 
-    // Copied and modified from YAM code:
-    // https://github.com/yam-finance/yam-protocol/blob/master/contracts/token/YAMGovernanceStorage.sol
-    // https://github.com/yam-finance/yam-protocol/blob/master/contracts/token/YAMGovernance.sol
-    // Which is copied and modified from COMPOUND:
-    // https://github.com/compound-finance/compound-protocol/blob/master/contracts/Governance/Comp.sol
+    address public DEX_ADDRESS;
 
     /// @notice A record of each accounts delegate
     mapping(address => address) internal _delegates;
@@ -49,6 +52,12 @@ contract ChuruToken is ERC20("CatalistDex Token", "CHURU"), Ownable {
     /// @notice An event thats emitted when a delegate account's vote balance changes
     event DelegateVotesChanged(address indexed delegate, uint256 previousBalance, uint256 newBalance);
 
+    constructor(address _dex) public {
+        DEX_ADDRESS = _dex;
+        _mint(msg.sender, TOTAL_SUPPLY);
+        _moveDelegates(address(0), _delegates[msg.sender], TOTAL_SUPPLY);
+    }
+
     /**
      * @notice Delegate votes from `msg.sender` to `delegatee`
      * @param delegator The address to get delegatee for
@@ -74,14 +83,7 @@ contract ChuruToken is ERC20("CatalistDex Token", "CHURU"), Ownable {
      * @param r Half of the ECDSA signature pair
      * @param s Half of the ECDSA signature pair
      */
-    function delegateBySig(
-        address delegatee,
-        uint256 nonce,
-        uint256 expiry,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) external {
+    function delegateBySig(address delegatee, uint256 nonce, uint256 expiry, uint8 v, bytes32 r, bytes32 s) external {
         bytes32 domainSeparator = keccak256(
             abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name())), getChainId(), address(this))
         );
@@ -158,11 +160,7 @@ contract ChuruToken is ERC20("CatalistDex Token", "CHURU"), Ownable {
         _moveDelegates(currentDelegate, delegatee, delegatorBalance);
     }
 
-    function _moveDelegates(
-        address srcRep,
-        address dstRep,
-        uint256 amount
-    ) internal {
+    function _moveDelegates(address srcRep, address dstRep, uint256 amount) internal {
         if (srcRep != dstRep && amount > 0) {
             if (srcRep != address(0)) {
                 // decrease old representative
@@ -182,12 +180,7 @@ contract ChuruToken is ERC20("CatalistDex Token", "CHURU"), Ownable {
         }
     }
 
-    function _writeCheckpoint(
-        address delegatee,
-        uint32 nCheckpoints,
-        uint256 oldVotes,
-        uint256 newVotes
-    ) internal {
+    function _writeCheckpoint(address delegatee, uint32 nCheckpoints, uint256 oldVotes, uint256 newVotes) internal {
         uint32 blockNumber = safe32(block.number, "CAKE::_writeCheckpoint: block number exceeds 32 bits");
 
         if (nCheckpoints > 0 && checkpoints[delegatee][nCheckpoints - 1].fromBlock == blockNumber) {
@@ -201,7 +194,7 @@ contract ChuruToken is ERC20("CatalistDex Token", "CHURU"), Ownable {
     }
 
     function safe32(uint256 n, string memory errorMessage) internal pure returns (uint32) {
-        require(n < 2**32, errorMessage);
+        require(n < 2 ** 32, errorMessage);
         return uint32(n);
     }
 
