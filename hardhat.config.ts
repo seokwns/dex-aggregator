@@ -2,6 +2,7 @@ import { HardhatUserConfig } from "hardhat/config";
 import "hardhat-abi-exporter";
 import "@nomicfoundation/hardhat-toolbox";
 import "dotenv/config";
+import "@nomicfoundation/hardhat-verify";
 
 const { ENDURANCE_DEPLOYER, TEST_1, TEST_2, TEST_3, TEST_4, TEST_5 } = process.env;
 
@@ -26,11 +27,79 @@ const config: HardhatUserConfig = {
       gasPrice: 25000000000,
       accounts: [TEST_1!, TEST_2!, TEST_3!, TEST_4!, TEST_5!],
     },
+    hashkey: {
+      url: "https://hashkeychain-testnet.alt.technology",
+      chainId: 133,
+      accounts: [ENDURANCE_DEPLOYER!],
+    },
   },
   solidity: {
     compilers: [
       {
+        version: "0.4.18",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+        },
+      },
+      {
+        version: "0.5.0",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 99999,
+          },
+        },
+      },
+      {
+        version: "0.5.16",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+        },
+      },
+      {
+        version: "0.6.0",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+        },
+      },
+      {
+        version: "0.6.2",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 99999,
+          },
+        },
+      },
+      {
+        version: "0.6.6",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 99999,
+          },
+        },
+      },
+      {
         version: "0.6.12",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+        },
+      },
+      {
+        version: "0.8.24",
         settings: {
           optimizer: {
             enabled: true,
