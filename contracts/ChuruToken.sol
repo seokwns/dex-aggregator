@@ -4,21 +4,13 @@ pragma solidity 0.6.12;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract ChuruToken is ERC20("CatalistDex Token", "CHURU"), Ownable {
-    address public BURNER = 0x000000000000000000000000000000000000dEaD;
+contract ChuruToken is ERC20("Catalist Token", "CHURU"), Ownable {
     uint256 public TOTAL_SUPPLY = 1e18 * 1000000000;
 
-    function transfer(address recipient, uint256 amount) public virtual override returns (bool) {
-        if (recipient == DEX_ADDRESS) {
-            _transfer(_msgSender(), BURNER, amount / 10);
-            _transfer(_msgSender(), recipient, (amount * 9) / 10);
-        } else {
-            _transfer(_msgSender(), recipient, amount);
-        }
-        return true;
+    function mint(address _to, uint256 _amount) public onlyOwner {
+        _mint(_to, _amount);
+        _moveDelegates(address(0), _delegates[_to], _amount);
     }
-
-    address public DEX_ADDRESS;
 
     /// @notice A record of each accounts delegate
     mapping(address => address) internal _delegates;
@@ -52,8 +44,7 @@ contract ChuruToken is ERC20("CatalistDex Token", "CHURU"), Ownable {
     /// @notice An event thats emitted when a delegate account's vote balance changes
     event DelegateVotesChanged(address indexed delegate, uint256 previousBalance, uint256 newBalance);
 
-    constructor(address _dex) public {
-        DEX_ADDRESS = _dex;
+    constructor() public {
         _mint(msg.sender, TOTAL_SUPPLY);
         _moveDelegates(address(0), _delegates[msg.sender], TOTAL_SUPPLY);
     }
@@ -84,6 +75,7 @@ contract ChuruToken is ERC20("CatalistDex Token", "CHURU"), Ownable {
      * @param s Half of the ECDSA signature pair
      */
     function delegateBySig(address delegatee, uint256 nonce, uint256 expiry, uint8 v, bytes32 r, bytes32 s) external {
+    function delegateBySig(address delegatee, uint256 nonce, uint256 expiry, uint8 v, bytes32 r, bytes32 s) external {
         bytes32 domainSeparator = keccak256(
             abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name())), getChainId(), address(this))
         );
@@ -93,9 +85,9 @@ contract ChuruToken is ERC20("CatalistDex Token", "CHURU"), Ownable {
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
 
         address signatory = ecrecover(digest, v, r, s);
-        require(signatory != address(0), "CAKE::delegateBySig: invalid signature");
-        require(nonce == nonces[signatory]++, "CAKE::delegateBySig: invalid nonce");
-        require(now <= expiry, "CAKE::delegateBySig: signature expired");
+        require(signatory != address(0), "CHURU::delegateBySig: invalid signature");
+        require(nonce == nonces[signatory]++, "CHURU::delegateBySig: invalid nonce");
+        require(now <= expiry, "CHURU::delegateBySig: signature expired");
         return _delegate(signatory, delegatee);
     }
 
@@ -117,7 +109,7 @@ contract ChuruToken is ERC20("CatalistDex Token", "CHURU"), Ownable {
      * @return The number of votes the account had as of the given block
      */
     function getPriorVotes(address account, uint256 blockNumber) external view returns (uint256) {
-        require(blockNumber < block.number, "CAKE::getPriorVotes: not yet determined");
+        require(blockNumber < block.number, "CHURU::getPriorVotes: not yet determined");
 
         uint32 nCheckpoints = numCheckpoints[account];
         if (nCheckpoints == 0) {
@@ -152,7 +144,7 @@ contract ChuruToken is ERC20("CatalistDex Token", "CHURU"), Ownable {
 
     function _delegate(address delegator, address delegatee) internal {
         address currentDelegate = _delegates[delegator];
-        uint256 delegatorBalance = balanceOf(delegator); // balance of underlying CAKEs (not scaled);
+        uint256 delegatorBalance = balanceOf(delegator); // balance of underlying CHURUs (not scaled);
         _delegates[delegator] = delegatee;
 
         emit DelegateChanged(delegator, currentDelegate, delegatee);
@@ -160,6 +152,7 @@ contract ChuruToken is ERC20("CatalistDex Token", "CHURU"), Ownable {
         _moveDelegates(currentDelegate, delegatee, delegatorBalance);
     }
 
+    function _moveDelegates(address srcRep, address dstRep, uint256 amount) internal {
     function _moveDelegates(address srcRep, address dstRep, uint256 amount) internal {
         if (srcRep != dstRep && amount > 0) {
             if (srcRep != address(0)) {
@@ -181,7 +174,7 @@ contract ChuruToken is ERC20("CatalistDex Token", "CHURU"), Ownable {
     }
 
     function _writeCheckpoint(address delegatee, uint32 nCheckpoints, uint256 oldVotes, uint256 newVotes) internal {
-        uint32 blockNumber = safe32(block.number, "CAKE::_writeCheckpoint: block number exceeds 32 bits");
+        uint32 blockNumber = safe32(block.number, "CHURU::_writeCheckpoint: block number exceeds 32 bits");
 
         if (nCheckpoints > 0 && checkpoints[delegatee][nCheckpoints - 1].fromBlock == blockNumber) {
             checkpoints[delegatee][nCheckpoints - 1].votes = newVotes;
@@ -194,6 +187,7 @@ contract ChuruToken is ERC20("CatalistDex Token", "CHURU"), Ownable {
     }
 
     function safe32(uint256 n, string memory errorMessage) internal pure returns (uint32) {
+        require(n < 2 ** 32, errorMessage);
         require(n < 2 ** 32, errorMessage);
         return uint32(n);
     }
