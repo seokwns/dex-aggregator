@@ -21,8 +21,9 @@ async function getFutureBlock(futureDate: string) {
 }
 
 async function main() {
-  await getFutureBlock("2024-11-19T07:00:00Z");
-  await getFutureBlock("2024-11-22T04:00:00Z");
+  console.log(ethers.formatUnits("59279350217679189084", 18));
+  // await getFutureBlock("2024-11-25T06:00:00Z");
+  await getFutureBlock("2024-12-03T06:00:00Z");
 }
 
 main()
