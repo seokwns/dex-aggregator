@@ -1,13 +1,16 @@
 import { ethers } from "hardhat";
 
-async function main() {
-  const [deployer, test1] = await ethers.getSigners();
-  // ------------------ Deploy ------------------
-  const usdc = await ethers.deployContract("TestToken", ["USDC", "USDC"]);
-  await usdc.waitForDeployment();
+async function createToken(name: string, symbol: string) {
+  const token = await ethers.deployContract("TestToken", [name, symbol]);
+  await token.waitForDeployment();
 
   console.log();
-  console.log(`USDC deployed to: ${usdc.target}`);
+  console.log(`${symbol} token deployed to: ${token.target}`);
+}
+
+async function main() {
+  await createToken("MK1", "MK1");
+  await createToken("MK2", "MK2");
 }
 
 main()
