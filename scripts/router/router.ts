@@ -13,6 +13,7 @@ interface BasePool {
   pairName: string;
   type: string;
   liquidity: number;
+  tick: number;
   pool: string;
   dex: string;
 }
@@ -48,6 +49,8 @@ function findSwapPaths(startToken: string, endToken: string, pools: Pool[], maxD
 
     for (const pool of pools) {
       if (visitedPools.has(pool)) continue;
+      if (pool.liquidity === 0) continue;
+
       const { token0, token1 } = pool;
 
       if (currentToken === token0 && !path.includes(token1)) {
@@ -97,10 +100,16 @@ function getQuote(amount: bigint, startToken: string, pools: Pool[]): number {
       quote = numerator / denominator;
       current = current === token0 ? token1 : token0;
     } else if (pool.type === DexVersion.V3) {
-      const { token0, token1, liquidity, sqrtPriceX96, fee } = pool as V3Pool;
+      const { token0, token1, liquidity, sqrtPriceX96, fee, tick } = pool as V3Pool;
       const sqrtPrice = Number(sqrtPriceX96) ** 2 / 2 ** 192;
 
       if (+liquidity === 0 || sqrtPrice === 0) return 0;
+
+      const sqrtPriceLower = 1.0001 ** (tick / 2);
+      const sqrtPriceLowerFloat = sqrtPriceLower / 2 ** 96;
+      const deltaX = liquidity * (1 / sqrtPriceLowerFloat - 1 / sqrtPrice);
+
+      if (deltaX < quote) return 0;
 
       if (current === token0) {
         quote = quote * (1 - fee / 1000000) * sqrtPrice;
@@ -119,7 +128,7 @@ function getRoutesWithQuote(
   amount: bigint,
   token0: string,
   paths: Pool[][],
-): { path: Pool[]; out: number; percent: number } {
+): { path: Pool[]; out: number; percent: number }[] {
   const distributionPercent = 5;
   const [percents, amounts] = getAmountDistribution(amount, distributionPercent);
 
@@ -154,11 +163,11 @@ function getRoutesWithQuote(
     }
   });
 
-  return routesWithQuote.filter((route) => route.percent === 100).sort((a, b) => (a.out > b.out ? -1 : 1))[0];
+  return routesWithQuote.filter((route) => route.percent === 100).sort((a, b) => (a.out > b.out ? -1 : 1));
 }
 
 async function main() {
-  // await update();
+  await update();
   const dbPools: Pool[] = JSON.parse(readFileSync("dragonswap-pools.json", "utf-8")) as unknown as Pool[];
   const klayswapPools: Pool[] = JSON.parse(readFileSync("klayswap-pools.json", "utf-8")) as unknown as Pool[];
   const neopinPools: Pool[] = JSON.parse(readFileSync("neopin-pools.json", "utf-8")) as unknown as Pool[];
@@ -166,15 +175,29 @@ async function main() {
   const pools = [...dbPools, ...klayswapPools, ...neopinPools].sort((a, b) => (a.liquidity > b.liquidity ? -1 : 1));
 
   // WKLAY -> WETH
-  const token0 = "0x19Aac5f612f524B754CA7e7c41cbFa2E981A4432";
+  // const token0 = "0x19Aac5f612f524B754CA7e7c41cbFa2E981A4432";
+  // const token1 = "0x98A8345bB9D3DDa9D808Ca1c9142a28F6b0430E1";
+
+  // BORA -> WETH
+  const token0 = "0x02cbE46fB8A1F579254a9B485788f2D86Cad51aa";
   const token1 = "0x98A8345bB9D3DDa9D808Ca1c9142a28F6b0430E1";
+
   const amount = ethers.parseEther("100");
-  const maxHops = 5;
+  const maxHops = 6;
 
   const paths = findSwapPaths(token0, token1, pools, maxHops);
-  const route = getRoutesWithQuote(amount, token0, paths);
+  const routes = getRoutesWithQuote(amount, token0, paths);
 
-  const { path, out, percent } = route;
+  console.log("candidate routes:", routes.length);
+  for (const { path, out, percent } of routes) {
+    const _path = path.map((pool) => pool.pairName).join(" -> ");
+    console.log(`Route: ${_path}`);
+    console.log(`Out: ${out}`);
+    console.log(`Percent: ${percent}%`);
+    console.log();
+  }
+
+  const { path, out, percent } = routes[0];
   const _path = path.map((pool) => pool.pairName).join(" -> ");
   console.log();
   console.log(`Route: ${_path}`);
