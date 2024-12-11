@@ -26,6 +26,7 @@ interface BasePool {
 interface V3Pool extends BasePool {
   fee: number;
   tickSpacing: number;
+  tick: number;
   sqrtPriceX96: string;
 }
 
@@ -85,6 +86,7 @@ async function getV3PoolData(): Promise<void> {
 
       const slot0 = await pool.slot0();
       pools[i].sqrtPriceX96 = slot0[0].toString();
+      pools[i].tick = slot0[1];
     }
 
     console.log(`Saving ${pools.length} pools to ${dex.name}-pools.json...`);
