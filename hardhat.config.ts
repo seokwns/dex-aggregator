@@ -99,6 +99,15 @@ const config: HardhatUserConfig = {
         },
       },
       {
+        version: "0.7.6",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+        },
+      },
+      {
         version: "0.8.24",
         settings: {
           optimizer: {
@@ -108,6 +117,28 @@ const config: HardhatUserConfig = {
         },
       },
     ],
+    overrides: {
+      "@pancakeswap/v3-core/contracts/libraries/FullMath.sol": {
+        version: "0.7.6",
+        settings: {},
+      },
+      "@pancakeswap/v3-core/contracts/libraries/TickBitmap.sol": {
+        version: "0.7.6",
+        settings: {},
+      },
+      "@pancakeswap/v3-core/contracts/libraries/TickMath.sol": {
+        version: "0.7.6",
+        settings: {},
+      },
+      "@pancakeswap/v3-periphery/contracts/libraries/PoolAddress.sol": {
+        version: "0.7.6",
+        settings: {},
+      },
+      "contracts/libraries/PoolTicksCounter.sol": {
+        version: "0.7.6",
+        settings: {},
+      },
+    },
   },
   etherscan: {
     apiKey: "Y4A5HJURG69NR77IGE8YZWZDZZMDFX3JNQ",
