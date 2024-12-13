@@ -3,38 +3,15 @@ import { writeFileSync } from "fs";
 import dgPools from "../../data/dg-pools";
 import klayPools from "../../data/klay-pools";
 import neopinPools from "../../data/neopin-pools";
+import { DexVersion, V2Pool, V3Pool } from "./types";
 
 const provider = new ethers.JsonRpcProvider("https://kaia.blockpi.network/v1/rpc/public");
-const tokenAbi = ["function symbol() view returns (string)"];
+const tokenAbi = [
+  "function symbol() view returns (string)",
+  "function decimals() view returns (uint)",
+  "function balanceOf(address) view returns (uint)",
+];
 const replacer = (_key: any, value: { toString: () => any }) => (typeof value === "bigint" ? value.toString() : value);
-
-enum DexVersion {
-  V2 = "v2",
-  V3 = "v3",
-}
-
-interface BasePool {
-  token0: string;
-  token1: string;
-  pairName: string;
-  type: string;
-  liquidity: number;
-  pool: string;
-  dex: string;
-}
-
-interface V3Pool extends BasePool {
-  fee: number;
-  tickSpacing: number;
-  tick: number;
-  sqrtPriceX96: string;
-}
-
-interface V2Pool extends BasePool {
-  kLast: string;
-  reserve0: number;
-  reserve1: number;
-}
 
 const v3Dexes = [
   {
@@ -72,16 +49,28 @@ async function getV3PoolData(): Promise<void> {
       const pool = new ethers.Contract(pools[i].pool, v3PoolAbi, provider);
       pools[i].liquidity = await pool.liquidity();
 
-      if (pools[i].liquidity === 0) {
-        console.log(`skip pool ${pool.getAddress()} with 0 liquidity`);
+      if (BigInt(pools[i].liquidity) === 0n) {
+        console.log(`skip pool ${pools[i].pool} with 0 liquidity`);
         continue;
       }
 
       const token0Symbol = await token0.symbol();
       const token1Symbol = await token1.symbol();
 
+      const token0Decimals = await token0.decimals();
+      const token1Decimals = await token1.decimals();
+
+      const token0Balance = await token0.balanceOf(pools[i].pool);
+      const token1Balance = await token1.balanceOf(pools[i].pool);
+
+      pools[i].token0Decimals = token0Decimals;
+      pools[i].token1Decimals = token1Decimals;
+
+      pools[i].token0Balance = token0Balance;
+      pools[i].token1Balance = token1Balance;
+
       pools[i].type = dex.version!.valueOf();
-      pools[i].pairName = `${token0Symbol}-${token1Symbol}`;
+      pools[i].pairName = `${token0Symbol}_${token1Symbol}`;
       pools[i].dex = dex.name;
 
       const slot0 = await pool.slot0();
@@ -116,10 +105,16 @@ async function getV2PoolData(): Promise<void> {
       pools[i].reserve1 = reserve1;
       pools[i].liquidity = Math.sqrt(Number(reserve0 * reserve1));
 
-      if (pools[i].liquidity === 0) {
-        console.log(`skip pool ${pool.getAddress()} with 0 liquidity`);
+      if (BigInt(Math.floor(pools[i].liquidity)) === 0n) {
+        console.log(`skip pool ${pools[i].pool} with 0 liquidity`);
         continue;
       }
+
+      const token0Decimals = await token0.decimals();
+      const token1Decimals = await token1.decimals();
+
+      pools[i].token0Decimals = token0Decimals;
+      pools[i].token1Decimals = token1Decimals;
 
       pools[i].type = dex.version!.valueOf();
       pools[i].pairName = `${token0Symbol}-${token1Symbol}`;
@@ -136,3 +131,12 @@ export async function update(): Promise<void> {
   await getV3PoolData();
   await getV2PoolData();
 }
+
+async function main(): Promise<void> {
+  await update();
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
