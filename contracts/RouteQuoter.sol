@@ -25,12 +25,14 @@ contract RouteQuoter {
         uint256 amountIn;
         uint24 fee;
         uint160 sqrtPriceLimitX96;
+        uint256 dex;
     }
 
     struct QuoteExactInputSingleV2Params {
         address tokenIn;
         address tokenOut;
         uint256 amountIn;
+        uint256 dex;
     }
 
     struct QuoteExactInputSingleStableParams {
@@ -40,8 +42,9 @@ contract RouteQuoter {
         uint256 flag;
     }
 
-    mapping(address => mapping(address => address)) public v2pools;
-    mapping(address => mapping(address => mapping(uint24 => address))) public v3pools;
+    mapping(address => mapping(address => mapping(uint256 => address))) public v2pools;
+    mapping(address => mapping(address => mapping(uint24 => mapping(uint256 => address)))) public v3pools;
+    mapping(address => uint256) public dexByPool;
 
     constructor() {}
 
@@ -49,18 +52,35 @@ contract RouteQuoter {
         address[] memory token0,
         address[] memory token1,
         uint24[] memory fee,
+        uint256[] memory dex,
         address[] memory poolAddress
     ) public {
+        require(
+            token0.length == token1.length &&
+                token1.length == fee.length &&
+                fee.length == dex.length &&
+                dex.length == poolAddress.length
+        );
+
         for (uint256 i = 0; i < token0.length; i++) {
-            v3pools[token0[i]][token1[i]][fee[i]] = poolAddress[i];
-            v3pools[token1[i]][token0[i]][fee[i]] = poolAddress[i];
+            v3pools[token0[i]][token1[i]][fee[i]][dex[i]] = poolAddress[i];
+            v3pools[token1[i]][token0[i]][fee[i]][dex[i]] = poolAddress[i];
+            dexByPool[poolAddress[i]] = dex[i];
         }
     }
 
-    function insertV2Pools(address[] memory token0, address[] memory token1, address[] memory poolAddress) public {
+    function insertV2Pools(
+        address[] memory token0,
+        address[] memory token1,
+        uint256[] memory dex,
+        address[] memory poolAddress
+    ) public {
+        require(token0.length == token1.length && token1.length == dex.length && dex.length == poolAddress.length);
+
         for (uint256 i = 0; i < token0.length; i++) {
-            v2pools[token0[i]][token1[i]] = poolAddress[i];
-            v2pools[token1[i]][token0[i]] = poolAddress[i];
+            v2pools[token0[i]][token1[i]][dex[i]] = poolAddress[i];
+            v2pools[token1[i]][token0[i]][dex[i]] = poolAddress[i];
+            dexByPool[poolAddress[i]] = dex[i];
         }
     }
 
@@ -74,7 +94,7 @@ contract RouteQuoter {
             : (tokenOut < tokenIn, uint256(-amount0Delta));
 
         // IPancakeV3Pool pool = SmartRouterHelper.getPool(deployer, tokenIn, tokenOut, fee);
-        address poolAddress = v3pools[tokenIn][tokenOut][fee];
+        address poolAddress = v3pools[tokenIn][tokenOut][fee][dexByPool[msg.sender]];
         require(poolAddress != address(0), "pool not found");
         IPancakeV3Pool pool = IPancakeV3Pool(poolAddress);
         (uint160 v3SqrtPriceX96After, int24 tickAfter, , , , , ) = pool.slot0();
@@ -103,7 +123,7 @@ contract RouteQuoter {
             : (tokenOut < tokenIn, uint256(-amount0Delta));
 
         // IPancakeV3Pool pool = SmartRouterHelper.getPool(deployer, tokenIn, tokenOut, fee);
-        address poolAddress = v3pools[tokenIn][tokenOut][fee];
+        address poolAddress = v3pools[tokenIn][tokenOut][fee][dexByPool[msg.sender]];
         require(poolAddress != address(0), "pool not found");
         IPancakeV3Pool pool = IPancakeV3Pool(poolAddress);
         (uint160 v3SqrtPriceX96After, int24 tickAfter, , , , , ) = pool.slot0();
@@ -158,9 +178,13 @@ contract RouteQuoter {
         require(token0 != address(0));
     }
 
-    function getReserves(address tokenA, address tokenB) public view returns (uint256 reserveA, uint256 reserveB) {
+    function getReserves(
+        address tokenA,
+        address tokenB,
+        uint256 dex
+    ) public view returns (uint256 reserveA, uint256 reserveB) {
         (address token0, address token1) = sortTokens(tokenA, tokenB);
-        address pool = v2pools[token0][token1];
+        address pool = v2pools[token0][token1][dex];
         (uint256 reserve0, uint256 reserve1, ) = IUniswapV2Pair(pool).getReserves();
         (reserveA, reserveB) = tokenA == token0 ? (reserve0, reserve1) : (reserve1, reserve0);
     }
@@ -182,7 +206,7 @@ contract RouteQuoter {
     function quoteExactInputSingleV2(
         QuoteExactInputSingleV2Params memory params
     ) public view returns (uint256 amountOut) {
-        (uint256 reserveIn, uint256 reserveOut) = getReserves(params.tokenIn, params.tokenOut);
+        (uint256 reserveIn, uint256 reserveOut) = getReserves(params.tokenIn, params.tokenOut, params.dex);
         amountOut = getAmountOut(params.amountIn, reserveIn, reserveOut);
     }
 
@@ -223,7 +247,7 @@ contract RouteQuoter {
 
         // ICatalistPool pool = SmartRouterHelper.getPool(deployer, params.tokenIn, params.tokenOut, params.fee);
         // (address token0, address token1) = sortTokens(params);
-        IPancakeV3Pool pool = IPancakeV3Pool(v3pools[params.tokenIn][params.tokenOut][params.fee]);
+        IPancakeV3Pool pool = IPancakeV3Pool(v3pools[params.tokenIn][params.tokenOut][params.fee][params.dex]);
 
         uint256 gasBefore = gasleft();
         try
@@ -244,21 +268,23 @@ contract RouteQuoter {
 
     /// @dev Get the quote for an exactIn swap between an array of Stable, V2 and/or V3 pools
     /// @param flag 0 for V3, 1 for V2, 2 for 2pool, 3 for 3pool
+    /// @param dex 0 for dragonswap, 1 for klayswap, 2 for neopin
     function quoteExactInput(
         bytes memory path,
         uint256[] memory flag,
+        uint256[] memory dex,
         uint256 amountIn
     )
         public
         returns (
             uint256 amountOut,
-            uint160[] memory v3SqrtPriceX96AfterList,
-            uint32[] memory v3InitializedTicksCrossedList,
+            // uint160[] memory v3SqrtPriceX96AfterList,
+            // uint32[] memory v3InitializedTicksCrossedList,
             uint256 v3SwapGasEstimate
         )
     {
-        v3SqrtPriceX96AfterList = new uint160[](path.numPools());
-        v3InitializedTicksCrossedList = new uint32[](path.numPools());
+        // v3SqrtPriceX96AfterList = new uint160[](path.numPools());
+        // v3InitializedTicksCrossedList = new uint32[](path.numPools());
 
         uint256 i = 0;
         while (true) {
@@ -266,7 +292,12 @@ contract RouteQuoter {
 
             if (flag[i] == 1) {
                 amountIn = quoteExactInputSingleV2(
-                    QuoteExactInputSingleV2Params({tokenIn: tokenIn, tokenOut: tokenOut, amountIn: amountIn})
+                    QuoteExactInputSingleV2Params({
+                        tokenIn: tokenIn,
+                        tokenOut: tokenOut,
+                        amountIn: amountIn,
+                        dex: dex[i]
+                    })
                 );
             } else if (flag[i] == 0) {
                 /// the outputs of prior swaps become the inputs to subsequent ones
@@ -281,11 +312,12 @@ contract RouteQuoter {
                             tokenOut: tokenOut,
                             fee: fee,
                             amountIn: amountIn,
-                            sqrtPriceLimitX96: 0
+                            sqrtPriceLimitX96: 0,
+                            dex: dex[i]
                         })
                     );
-                v3SqrtPriceX96AfterList[i] = _sqrtPriceX96After;
-                v3InitializedTicksCrossedList[i] = _initializedTicksCrossed;
+                // v3SqrtPriceX96AfterList[i] = _sqrtPriceX96After;
+                // v3InitializedTicksCrossedList[i] = _initializedTicksCrossed;
                 v3SwapGasEstimate += _gasEstimate;
                 amountIn = _amountOut;
             } else {
@@ -298,7 +330,8 @@ contract RouteQuoter {
             if (path.hasMultiplePools()) {
                 path = path.skipToken();
             } else {
-                return (amountIn, v3SqrtPriceX96AfterList, v3InitializedTicksCrossedList, v3SwapGasEstimate);
+                // return (amountIn, v3SqrtPriceX96AfterList, v3InitializedTicksCrossedList, v3SwapGasEstimate);
+                return (amountIn, v3SwapGasEstimate);
             }
         }
     }

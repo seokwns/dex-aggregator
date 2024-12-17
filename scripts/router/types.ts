@@ -15,7 +15,8 @@ export interface BasePool {
   liquidity: number;
   tick: number;
   pool: string;
-  dex: string;
+  dex: number;
+  dexName: string;
 }
 
 export interface V3Pool extends BasePool {

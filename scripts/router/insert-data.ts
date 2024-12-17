@@ -3,7 +3,7 @@ import { Pool, V2Pool, V3Pool } from "./types";
 import { readFileSync } from "fs";
 
 async function main() {
-  const routeQuoterAddress = "0x00440ed78d6DE8959E0c826f1b3F0CB881F9eF97";
+  const routeQuoterAddress = "0x718A983a0612BAc700AE9F46220A6E5C292020B9";
   const routeQuoter = await ethers.getContractAt("RouteQuoter", routeQuoterAddress);
 
   const dbPools: Pool[] = JSON.parse(readFileSync("dragonswap-pools.json", "utf-8")) as unknown as Pool[];
@@ -13,7 +13,7 @@ async function main() {
   const pools = [...dbPools, ...klayswapPools, ...neopinPools].sort((a, b) => (a.liquidity > b.liquidity ? -1 : 1));
 
   const v3Pools = pools.filter((pool) => pool.type === "v3") as V3Pool[];
-  const v2Pools = pools.filter((pool) => pool.type === "v2") as V2Pool[];
+  // const v2Pools = pools.filter((pool) => pool.type === "v2") as V2Pool[];
 
   const chunkSize = 100;
   const chunkedV3Pools = Array.from({ length: Math.ceil(v3Pools.length / chunkSize) }, (_, i) =>
@@ -25,6 +25,7 @@ async function main() {
       chunk.map((pool) => pool.token0),
       chunk.map((pool) => pool.token1),
       chunk.map((pool) => pool.fee),
+      chunk.map((pool) => pool.dex),
       chunk.map((pool) => pool.pool),
       {
         gasLimit: 10000000,

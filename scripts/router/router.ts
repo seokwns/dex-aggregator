@@ -221,10 +221,10 @@ async function getRoutesWithQuote(routes: RouteWithQuote[]): Promise<RouteWithQu
 async function main() {
   // await update();
   const dbPools: Pool[] = JSON.parse(readFileSync("dragonswap-pools.json", "utf-8")) as unknown as Pool[];
-  // const klayswapPools: Pool[] = JSON.parse(readFileSync("klayswap-pools.json", "utf-8")) as unknown as Pool[];
+  const klayswapPools: Pool[] = JSON.parse(readFileSync("klayswap-pools.json", "utf-8")) as unknown as Pool[];
   const neopinPools: Pool[] = JSON.parse(readFileSync("neopin-pools.json", "utf-8")) as unknown as Pool[];
 
-  const pools = [...dbPools, ...neopinPools]
+  const pools = [...dbPools, ...klayswapPools, ...neopinPools]
     .filter((pool) => pool.liquidity > 0)
     .sort((a, b) => (a.liquidity > b.liquidity ? -1 : 1));
 
@@ -245,7 +245,7 @@ async function main() {
   // const token1 = "0x3043988Aa54bb3ae4DA60EcB1DC643c630A564F0";
 
   const amountIn = ethers.parseEther("10");
-  const maxHops = 5;
+  const maxHops = 4;
 
   const allPaths = findSwapPaths(token0, token1, pools, maxHops);
   writeFileSync("all-paths.json", JSON.stringify(allPaths, replacer, 2));
@@ -263,7 +263,7 @@ async function main() {
   const _path = paths
     .map((path) => {
       return path.pools.map((pool) => {
-        return `${pool.pairName} (${pool.dex})`;
+        return `${pool.pairName} (${pool.dexName})`;
       });
     })
     .join("\n");

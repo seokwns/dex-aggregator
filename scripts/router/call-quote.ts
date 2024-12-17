@@ -3,10 +3,10 @@ import { DexVersion, Pool, Quote, V2Pool, V3Pool } from "./types";
 
 const provider = new ethers.JsonRpcProvider("https://public-en.node.kaia.io");
 const wallet = new ethers.Wallet(process.env.TEST_1!, provider);
-const routeQuoterAddress = "0x00440ed78d6de8959e0c826f1b3f0cb881f9ef97";
+const routeQuoterAddress = "0x718A983a0612BAc700AE9F46220A6E5C292020B9";
 const routeQuoter = new ethers.Contract(
   routeQuoterAddress,
-  ["function quoteExactInput(bytes, uint[], uint) public view returns (uint, uint[], uint[], uint)"],
+  ["function quoteExactInput(bytes, uint[], uint[], uint) public view returns (uint, uint)"],
   wallet,
 );
 
@@ -54,16 +54,17 @@ function encodeRoute(pools: Pool[], tokenIn: string): string {
 export async function getAmountOut(pools: Pool[], tokenIn: string, amountIn: bigint): Promise<Quote> {
   const path = encodeRoute(pools, tokenIn);
   const flag = pools.map((pool) => (pool.type === DexVersion.V3 ? 0 : 1));
+  const dex = pools.map((pool) => pool.dex);
 
   try {
-    const result = await routeQuoter.quoteExactInput.staticCall(path, flag, amountIn, {
+    const result = await routeQuoter.quoteExactInput.staticCall(path, flag, dex, amountIn, {
       gasLimit: 1000000,
       gasPrice: 25000000000,
     });
 
     return {
       amountOut: result[0],
-      gasEstimate: result[3],
+      gasEstimate: result[1],
     };
   } catch (error) {
     return {

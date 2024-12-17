@@ -15,11 +15,13 @@ const replacer = (_key: any, value: { toString: () => any }) => (typeof value ==
 
 const v3Dexes = [
   {
+    id: 0,
     name: "dragonswap",
     pools: dgPools as unknown as V3Pool[],
     version: DexVersion.V3,
   },
   {
+    id: 1,
     name: "klayswap",
     pools: klayPools as unknown as V3Pool[],
     version: DexVersion.V3,
@@ -28,6 +30,7 @@ const v3Dexes = [
 
 const v2Dexes = [
   {
+    id: 2,
     name: "neopin",
     pools: neopinPools as unknown as V2Pool[],
     version: DexVersion.V2,
@@ -71,7 +74,8 @@ async function getV3PoolData(): Promise<void> {
 
       pools[i].type = dex.version!.valueOf();
       pools[i].pairName = `${token0Symbol}_${token1Symbol}`;
-      pools[i].dex = dex.name;
+      pools[i].dex = dex.id;
+      pools[i].dexName = dex.name;
 
       const slot0 = await pool.slot0();
       pools[i].sqrtPriceX96 = slot0[0].toString();
@@ -118,7 +122,8 @@ async function getV2PoolData(): Promise<void> {
 
       pools[i].type = dex.version!.valueOf();
       pools[i].pairName = `${token0Symbol}-${token1Symbol}`;
-      pools[i].dex = dex.name;
+      pools[i].dex = dex.id;
+      pools[i].dexName = dex.name;
       pools[i].kLast = await pool.kLast();
     }
 
