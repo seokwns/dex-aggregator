@@ -2,18 +2,21 @@
 pragma solidity =0.7.6;
 pragma abicoder v2;
 
-import "@pancakeswap/v3-periphery/contracts/libraries/Path.sol";
 import "@pancakeswap/v3-core/contracts/libraries/SafeCast.sol";
 import "@pancakeswap/v3-core/contracts/libraries/TickMath.sol";
 import "@pancakeswap/v3-core/contracts/libraries/TickBitmap.sol";
 import "@pancakeswap/v3-core/contracts/libraries/LowGasSafeMath.sol";
 import "@pancakeswap/v3-core/contracts/interfaces/IPancakeV3Pool.sol";
+import "@pancakeswap/v3-periphery/contracts/libraries/Path.sol";
 
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 
-import "./libraries/PoolTicksCounter.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-contract RouteQuoter {
+import "./libraries/PoolTicksCounter.sol";
+import "./interfaces/IPoolLocator.sol";
+
+contract RouteQuoter is ReentrancyGuard {
     using Path for bytes;
     using SafeCast for uint256;
     using LowGasSafeMath for uint256;
@@ -42,46 +45,10 @@ contract RouteQuoter {
         uint256 flag;
     }
 
-    mapping(address => mapping(address => mapping(uint256 => address))) public v2pools;
-    mapping(address => mapping(address => mapping(uint24 => mapping(uint256 => address)))) public v3pools;
-    mapping(address => uint256) public dexByPool;
+    IPoolLocator public poolLocator;
 
-    constructor() {}
-
-    function insertV3Pools(
-        address[] memory token0,
-        address[] memory token1,
-        uint24[] memory fee,
-        uint256[] memory dex,
-        address[] memory poolAddress
-    ) public {
-        require(
-            token0.length == token1.length &&
-                token1.length == fee.length &&
-                fee.length == dex.length &&
-                dex.length == poolAddress.length
-        );
-
-        for (uint256 i = 0; i < token0.length; i++) {
-            v3pools[token0[i]][token1[i]][fee[i]][dex[i]] = poolAddress[i];
-            v3pools[token1[i]][token0[i]][fee[i]][dex[i]] = poolAddress[i];
-            dexByPool[poolAddress[i]] = dex[i];
-        }
-    }
-
-    function insertV2Pools(
-        address[] memory token0,
-        address[] memory token1,
-        uint256[] memory dex,
-        address[] memory poolAddress
-    ) public {
-        require(token0.length == token1.length && token1.length == dex.length && dex.length == poolAddress.length);
-
-        for (uint256 i = 0; i < token0.length; i++) {
-            v2pools[token0[i]][token1[i]][dex[i]] = poolAddress[i];
-            v2pools[token1[i]][token0[i]][dex[i]] = poolAddress[i];
-            dexByPool[poolAddress[i]] = dex[i];
-        }
+    constructor(IPoolLocator _poolLocator) {
+        poolLocator = _poolLocator;
     }
 
     function pancakeV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes memory path) external view {
@@ -94,7 +61,7 @@ contract RouteQuoter {
             : (tokenOut < tokenIn, uint256(-amount0Delta));
 
         // IPancakeV3Pool pool = SmartRouterHelper.getPool(deployer, tokenIn, tokenOut, fee);
-        address poolAddress = v3pools[tokenIn][tokenOut][fee][dexByPool[msg.sender]];
+        address poolAddress = poolLocator.getV3Pool(tokenIn, tokenOut, fee, msg.sender);
         require(poolAddress != address(0), "pool not found");
         IPancakeV3Pool pool = IPancakeV3Pool(poolAddress);
         (uint160 v3SqrtPriceX96After, int24 tickAfter, , , , , ) = pool.slot0();
@@ -123,7 +90,7 @@ contract RouteQuoter {
             : (tokenOut < tokenIn, uint256(-amount0Delta));
 
         // IPancakeV3Pool pool = SmartRouterHelper.getPool(deployer, tokenIn, tokenOut, fee);
-        address poolAddress = v3pools[tokenIn][tokenOut][fee][dexByPool[msg.sender]];
+        address poolAddress = poolLocator.getV3Pool(tokenIn, tokenOut, fee, msg.sender);
         require(poolAddress != address(0), "pool not found");
         IPancakeV3Pool pool = IPancakeV3Pool(poolAddress);
         (uint160 v3SqrtPriceX96After, int24 tickAfter, , , , , ) = pool.slot0();
@@ -184,7 +151,7 @@ contract RouteQuoter {
         uint256 dex
     ) public view returns (uint256 reserveA, uint256 reserveB) {
         (address token0, address token1) = sortTokens(tokenA, tokenB);
-        address pool = v2pools[token0][token1][dex];
+        address pool = poolLocator.v2pools(token0, token1, dex);
         (uint256 reserve0, uint256 reserve1, ) = IUniswapV2Pair(pool).getReserves();
         (reserveA, reserveB) = tokenA == token0 ? (reserve0, reserve1) : (reserve1, reserve0);
     }
@@ -247,7 +214,9 @@ contract RouteQuoter {
 
         // ICatalistPool pool = SmartRouterHelper.getPool(deployer, params.tokenIn, params.tokenOut, params.fee);
         // (address token0, address token1) = sortTokens(params);
-        IPancakeV3Pool pool = IPancakeV3Pool(v3pools[params.tokenIn][params.tokenOut][params.fee][params.dex]);
+        IPancakeV3Pool pool = IPancakeV3Pool(
+            poolLocator.v3pools(params.tokenIn, params.tokenOut, params.fee, params.dex)
+        );
 
         uint256 gasBefore = gasleft();
         try
@@ -303,8 +272,10 @@ contract RouteQuoter {
                 /// the outputs of prior swaps become the inputs to subsequent ones
                 (
                     uint256 _amountOut,
-                    uint160 _sqrtPriceX96After,
-                    uint32 _initializedTicksCrossed,
+                    ,
+                    ,
+                    // uint160 _sqrtPriceX96After,
+                    // uint32 _initializedTicksCrossed,
                     uint256 _gasEstimate
                 ) = quoteExactInputSingleV3(
                         QuoteExactInputSingleV3Params({
