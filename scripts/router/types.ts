@@ -55,3 +55,11 @@ export interface RouteWithQuote extends Route {
   amountOut: bigint;
   gasEstimate: bigint;
 }
+
+export interface ExactInputParams {
+  path: string;
+  recipient: string;
+  amountIn: bigint;
+  amountOutMinimum: bigint;
+  dex: number[];
+}
