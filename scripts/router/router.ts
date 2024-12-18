@@ -2,7 +2,7 @@ import { ethers } from "ethers";
 import { readFileSync, writeFileSync } from "fs";
 import { update } from "./pool-data";
 import { DexVersion, Path, Pool, RouteWithQuote, V2Pool, V3Pool } from "./types";
-import { getAmountOut } from "./call-quote";
+import { encodeRoute, getAmountOut, swap } from "./call-quote";
 
 const replacer = (_key: any, value: { toString: () => any }) => (typeof value === "bigint" ? value.toString() : value);
 
@@ -17,6 +17,7 @@ const replacer = (_key: any, value: { toString: () => any }) => (typeof value ==
 function findSwapPaths(startToken: string, endToken: string, pools: Pool[], maxDepth: number): Pool[][] {
   const tokenToPools: Map<string, Pool[]> = new Map();
 
+  // 각 토큰별 스왑 가능한 풀 정보 저장
   for (const pool of pools) {
     const { token0, token1 } = pool;
     if (!tokenToPools.has(token0)) tokenToPools.set(token0, []);
@@ -26,37 +27,38 @@ function findSwapPaths(startToken: string, endToken: string, pools: Pool[], maxD
   }
 
   const queue: [string, string[], Set<Pool>][] = [[startToken, [startToken], new Set()]];
-  const visitedPools = new Set<Pool>();
   const paths: Pool[][] = [];
 
+  // BFS 시작
   while (queue.length > 0) {
     const [currentToken, path, usedPools] = queue.shift()!;
 
+    // 최대 홉(스왑 가능한 횟수) 초과 시 continue
     if (path.length > maxDepth + 1) continue;
 
+    // 도착 토큰에 도달 시 경로 저장, 해당 경로 탐색 중지
     if (currentToken === endToken) {
       paths.push(Array.from(usedPools));
       continue;
     }
 
+    // 현재 토큰에서 스왑 가능한 풀 정보 가져오기
     const connectedPools = tokenToPools.get(currentToken) || [];
+
+    // 다음 토큰으로 이동
     for (const pool of connectedPools) {
-      if (usedPools.has(pool) || visitedPools.has(pool)) continue;
+      // 이미 사용한 풀이면 continue
+      if (usedPools.has(pool)) continue;
 
       const nextToken = pool.token0 === currentToken ? pool.token1 : pool.token0;
 
+      // 다음 토큰이 이미 경로에 있으면 continue
       if (path.includes(nextToken)) continue;
 
+      // 다음 토큰, 경로, 사용한 풀 정보 저장
       const newUsedPools = new Set(usedPools);
       newUsedPools.add(pool);
-
       queue.push([nextToken, [...path, nextToken], newUsedPools]);
-    }
-  }
-
-  for (const path of paths) {
-    for (const pool of path) {
-      visitedPools.add(pool);
     }
   }
 
@@ -64,7 +66,7 @@ function findSwapPaths(startToken: string, endToken: string, pools: Pool[], maxD
 }
 
 /**
- * 비율에 따른 토큰 수량을 계산합니다.
+ * @dev 비율에 따른 토큰 수량을 계산합니다. distributionPercent 가 5 라면, 5% ~ 100% 까지 5% 단위로 분배합니다.
  * @param amount 토큰 수량
  * @param distributionPercent 금액 분배 비율
  * @returns 비율에 맞게 분배된 토큰 수량
@@ -110,7 +112,7 @@ function getQuote(pools: Pool[], token0: string, amountIn: bigint): bigint {
       quote = numerator / denominator;
       current = current === token0 ? token1 : token0;
     } else if (pool.type === DexVersion.V3) {
-      const { token0, token1, liquidity, sqrtPriceX96, token0Decimals, token1Decimals, token0Balance, token1Balance } =
+      const { token0, token1, sqrtPriceX96, token0Decimals, token1Decimals, token0Balance, token1Balance } =
         pool as V3Pool;
 
       const sqrtPrice = Number(sqrtPriceX96) / 2 ** 96;
@@ -244,7 +246,7 @@ async function main() {
   // const token0 = "0xF4546E1D3aD590a3c6d178d671b3bc0e8a81e27d";
   // const token1 = "0x3043988Aa54bb3ae4DA60EcB1DC643c630A564F0";
 
-  const amountIn = ethers.parseEther("10");
+  const amountIn = ethers.parseEther("20");
   const maxHops = 4;
 
   const allPaths = findSwapPaths(token0, token1, pools, maxHops);
@@ -272,6 +274,24 @@ async function main() {
   console.log(`Route: \n${_path}`);
   console.log(`Out: ${amountOut}`);
   console.log(`gas: ${gasEstimate}`);
+
+  // 스왑 호출 전에 approve 필수 approve(pool 주소, 스왑할 token0 수량)
+  let actualAmountOut = 0;
+
+  for (const path of paths) {
+    const { pools, amountIn } = path;
+    const out = await swap(
+      pools,
+      "0xF783145cf9cb337e1017EA65C6AFd7d8fdB04e6C",
+      token0,
+      amountIn,
+      (amountOut * 99n) / 100n,
+    );
+
+    actualAmountOut += out;
+  }
+
+  console.log(`Actual out: ${actualAmountOut}`);
 }
 
 main().catch((error) => {
