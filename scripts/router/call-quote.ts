@@ -1,16 +1,46 @@
 import { ethers } from "ethers";
-import { DexVersion, Pool, Quote, V2Pool, V3Pool } from "./types";
+import { DexVersion, ExactInputParams, Pool, Quote, V2Pool, V3Pool } from "./types";
 
 const provider = new ethers.JsonRpcProvider("https://public-en.node.kaia.io");
-const wallet = new ethers.Wallet(process.env.TEST_1!, provider);
-const routeQuoterAddress = "0x718A983a0612BAc700AE9F46220A6E5C292020B9";
+const wallet = new ethers.Wallet(process.env.TEST_3!, provider);
+
+const routeQuoterAddress = "0x0b9c4CA7c4f176f093297FA717655fa3354425Af";
+const smartRouterAddress = "0xC0a9CBbaDcc7A20559C10C7A2e8e89879bCB960a";
+
 const routeQuoter = new ethers.Contract(
   routeQuoterAddress,
   ["function quoteExactInput(bytes, uint[], uint[], uint) public view returns (uint, uint)"],
   wallet,
 );
 
-function encodeRoute(pools: Pool[], tokenIn: string): string {
+const smartRouter = new ethers.Contract(
+  smartRouterAddress,
+  [
+    {
+      inputs: [
+        {
+          components: [
+            { internalType: "bytes", name: "path", type: "bytes" },
+            { internalType: "address", name: "recipient", type: "address" },
+            { internalType: "uint256", name: "amountIn", type: "uint256" },
+            { internalType: "uint256", name: "amountOutMinimum", type: "uint256" },
+            { internalType: "uint256[]", name: "dex", type: "uint256[]" },
+          ],
+          internalType: "struct ExactInputParams",
+          name: "params",
+          type: "tuple",
+        },
+      ],
+      name: "exactInput",
+      outputs: [{ internalType: "uint256", name: "amountOut", type: "uint256" }],
+      stateMutability: "payable",
+      type: "function",
+    },
+  ],
+  wallet,
+);
+
+export function encodeRoute(pools: Pool[], tokenIn: string): string {
   let data = ethers.getBytes("0x");
 
   data = ethers.getBytes(ethers.concat([data, ethers.getBytes(tokenIn)]));
@@ -74,54 +104,30 @@ export async function getAmountOut(pools: Pool[], tokenIn: string, amountIn: big
   }
 }
 
-// async function main() {
-//   const swapRoute = [
-//     {
-//       token0: "0x19Aac5f612f524B754CA7e7c41cbFa2E981A4432",
-//       token1: "0x5C13E303a62Fc5DEdf5B52D66873f2E59fEdADC2",
-//       fee: "500",
-//       tickSpacing: "10",
-//       pool: "0xb64BA987eD3BD9808dBCc19EE3C2A3C79A977E66",
-//       liquidity: "19085490598521496226",
-//       token0Decimals: "18",
-//       token1Decimals: "6",
-//       token0Balance: "8967645749206703607691066",
-//       token1Balance: "1210593111678",
-//       type: "v3",
-//       pairName: "WKLAY_USDT",
-//       dex: "dragonswap",
-//       sqrtPriceX96: "40994638695492254582899",
-//       tick: "-289503",
-//     },
-//     {
-//       token0: "0x5C13E303a62Fc5DEdf5B52D66873f2E59fEdADC2",
-//       token1: "0x98A8345bB9D3DDa9D808Ca1c9142a28F6b0430E1",
-//       fee: "1000",
-//       tickSpacing: "20",
-//       pool: "0xAb9270593dBc94b13F76C960496865Dd87C06489",
-//       liquidity: "214092285338070472",
-//       token0Decimals: "6",
-//       token1Decimals: "18",
-//       token0Balance: "2191672795753",
-//       token1Balance: "258540857280273582990",
-//       type: "v3",
-//       pairName: "USDT_WETH",
-//       dex: "dragonswap",
-//       sqrtPriceX96: "1271238128745334098071738706812528",
-//       tick: "193673",
-//     },
-//   ];
+export async function swap(
+  pools: Pool[],
+  recipient: string,
+  tokenIn: string,
+  amountIn: bigint,
+  amountOutMinimum: bigint,
+): Promise<number> {
+  const path = encodeRoute(pools, tokenIn);
+  const dex = pools.map((pool) => pool.dex);
 
-//   const amountIn = ethers.parseEther("1");
-//   const tokenIn = "0x19Aac5f612f524B754CA7e7c41cbFa2E981A4432";
-//   const quote = await getAmountOut(swapRoute as unknown as Pool[], tokenIn, amountIn);
-//   console.log(quote);
+  const params = {
+    path,
+    recipient,
+    amountIn,
+    amountOutMinimum,
+    dex,
+  } as ExactInputParams;
 
-//   console.log(`Amount out: ${quote.amountOut}`);
-//   console.log(`Gas estimate: ${quote.gasEstimate}`);
-// }
+  const result = await smartRouter.exactInput(params, {
+    gasLimit: 1000000,
+    gasPrice: 25000000000,
+  });
 
-// main().catch((error) => {
-//   console.error(error);
-//   process.exitCode = 1;
-// });
+  await result.wait();
+
+  return result[0];
+}
