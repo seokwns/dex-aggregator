@@ -261,12 +261,24 @@ async function main() {
   console.log("routes with quote:", routesWithQuote.length);
   writeFileSync("routes-with-quote.json", JSON.stringify(routesWithQuote, replacer, 2));
 
+  let currency = token0;
   const { paths, amountOut, gasEstimate } = routesWithQuote[0];
   const _path = paths
     .map((path) => {
-      return path.pools.map((pool) => {
-        return `${pool.pairName} (${pool.dexName})`;
-      });
+      return path.pools
+        .map((pool) => {
+          const nextCurrency = currency === pool.token0 ? pool.token1 : pool.token0;
+          const sp = pool.pairName.split("_");
+          const from = currency === pool.token0 ? 0 : 1;
+          const to = ~from & 1;
+          const fromToken = sp[from];
+          const toToken = sp[to];
+
+          currency = nextCurrency;
+
+          return `${fromToken} -> ${toToken} (${pool.dexName}, ${pool.type}, ${pool.pool})`;
+        })
+        .join("\n -> ");
     })
     .join("\n");
 
