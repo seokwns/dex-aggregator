@@ -3,8 +3,8 @@ import { Pool, V2Pool, V3Pool } from "./types";
 import { readFileSync } from "fs";
 
 async function main() {
-  const routeQuoterAddress = "0x718A983a0612BAc700AE9F46220A6E5C292020B9";
-  const routeQuoter = await ethers.getContractAt("RouteQuoter", routeQuoterAddress);
+  const poolLocatorAddress = "0x74FCBa35d2Ba95be54Df9Df1344E52e0C1bdcEb2";
+  const poolLocator = await ethers.getContractAt("PoolLocator", poolLocatorAddress);
 
   const dbPools: Pool[] = JSON.parse(readFileSync("dragonswap-pools.json", "utf-8")) as unknown as Pool[];
   const klayswapPools: Pool[] = JSON.parse(readFileSync("klayswap-pools.json", "utf-8")) as unknown as Pool[];
@@ -21,7 +21,7 @@ async function main() {
   );
 
   for (const chunk of chunkedV3Pools) {
-    const tx = await routeQuoter.insertV3Pools(
+    const tx = await poolLocator.insertV3Pools(
       chunk.map((pool) => pool.token0),
       chunk.map((pool) => pool.token1),
       chunk.map((pool) => pool.fee),
