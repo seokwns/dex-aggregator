@@ -63,3 +63,12 @@ export interface ExactInputParams {
   amountOutMinimum: bigint;
   dex: number[];
 }
+
+export interface MixedSwapParams {
+  recipient: string;
+  path: string;
+  flag: number[];
+  dex: number[];
+  amountIn: bigint;
+  amountOutMinimum: bigint;
+}
