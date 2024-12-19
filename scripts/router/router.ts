@@ -2,7 +2,7 @@ import { ethers } from "ethers";
 import { readFileSync, writeFileSync } from "fs";
 import { update } from "./pool-data";
 import { DexVersion, Path, Pool, RouteWithQuote, V2Pool, V3Pool } from "./types";
-import { encodeRoute, getAmountOut, swap } from "./call-quote";
+import { encodeRoute, getAmountOut, mixedSwap, swap } from "./call-quote";
 
 const replacer = (_key: any, value: { toString: () => any }) => (typeof value === "bigint" ? value.toString() : value);
 
@@ -231,8 +231,12 @@ async function main() {
     .sort((a, b) => (a.liquidity > b.liquidity ? -1 : 1));
 
   // WKLAY -> WETH
+  // const token0 = "0x19Aac5f612f524B754CA7e7c41cbFa2E981A4432";
+  // const token1 = "0x98A8345bB9D3DDa9D808Ca1c9142a28F6b0430E1";
+
+  // WKLAY -> GXA
   const token0 = "0x19Aac5f612f524B754CA7e7c41cbFa2E981A4432";
-  const token1 = "0x98A8345bB9D3DDa9D808Ca1c9142a28F6b0430E1";
+  const token1 = "0xA80e96cCeB1419f9BD9F1c67F7978F51b534A11b";
 
   // BORA -> WETH
   // const token0 = "0x02cbE46fB8A1F579254a9B485788f2D86Cad51aa";
@@ -246,7 +250,7 @@ async function main() {
   // const token0 = "0xF4546E1D3aD590a3c6d178d671b3bc0e8a81e27d";
   // const token1 = "0x3043988Aa54bb3ae4DA60EcB1DC643c630A564F0";
 
-  const amountIn = ethers.parseEther("20");
+  const amountIn = ethers.parseEther("2");
   const maxHops = 4;
 
   const allPaths = findSwapPaths(token0, token1, pools, maxHops);
@@ -288,22 +292,39 @@ async function main() {
   console.log(`gas: ${gasEstimate}`);
 
   // 스왑 호출 전에 approve 필수 approve(pool 주소, 스왑할 token0 수량)
-  let actualAmountOut = 0;
+  // let actualAmountOut = 0;
 
-  for (const path of paths) {
-    const { pools, amountIn } = path;
-    const out = await swap(
-      pools,
-      "0xF783145cf9cb337e1017EA65C6AFd7d8fdB04e6C",
-      token0,
-      amountIn,
-      (amountOut * 99n) / 100n,
-    );
+  // for (const path of paths) {
+  //   const { pools, amountIn } = path;
+  //   const out = await swap(
+  //     pools,
+  //     "0xF783145cf9cb337e1017EA65C6AFd7d8fdB04e6C",
+  //     token0,
+  //     amountIn,
+  //     (amountOut * 99n) / 100n,
+  //   );
 
-    actualAmountOut += out;
-  }
+  //   actualAmountOut += out;
+  // }
 
-  console.log(`Actual out: ${actualAmountOut}`);
+  // console.log(`Actual out: ${actualAmountOut}`);
+
+  // let actualAmountOut = 0;
+
+  // for (const path of paths) {
+  //   const { pools, amountIn } = path;
+  //   const out = await mixedSwap(
+  //     pools,
+  //     "0xF783145cf9cb337e1017EA65C6AFd7d8fdB04e6C",
+  //     token0,
+  //     amountIn,
+  //     (amountOut * 99n) / 100n,
+  //   );
+
+  //   actualAmountOut += out;
+  // }
+
+  // console.log(`Actual out: ${actualAmountOut}`);
 }
 
 main().catch((error) => {
