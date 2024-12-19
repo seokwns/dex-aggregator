@@ -4,8 +4,8 @@ import { DexVersion, ExactInputParams, Pool, Quote, V2Pool, V3Pool } from "./typ
 const provider = new ethers.JsonRpcProvider("https://public-en.node.kaia.io");
 const wallet = new ethers.Wallet(process.env.TEST_3!, provider);
 
-const routeQuoterAddress = "0x0b9c4CA7c4f176f093297FA717655fa3354425Af";
-const smartRouterAddress = "0xC0a9CBbaDcc7A20559C10C7A2e8e89879bCB960a";
+const routeQuoterAddress = "0xA2Ae96A56436a97a2B55eE6a6ce35D023550D878";
+const smartRouterAddress = "0xf666195bd67a0dA429a9B49f7B9C23fbfdE50bb0";
 
 const routeQuoter = new ethers.Contract(
   routeQuoterAddress,
@@ -32,6 +32,27 @@ const smartRouter = new ethers.Contract(
         },
       ],
       name: "exactInput",
+      outputs: [{ internalType: "uint256", name: "amountOut", type: "uint256" }],
+      stateMutability: "payable",
+      type: "function",
+    },
+    {
+      inputs: [
+        {
+          components: [
+            { internalType: "address", name: "recipient", type: "address" },
+            { internalType: "bytes", name: "path", type: "bytes" },
+            { internalType: "uint256[]", name: "flag", type: "uint256[]" },
+            { internalType: "uint256[]", name: "dex", type: "uint256[]" },
+            { internalType: "uint256", name: "amountIn", type: "uint256" },
+            { internalType: "uint256", name: "amountOutMinimum", type: "uint256" },
+          ],
+          internalType: "struct ExactInputParams",
+          name: "params",
+          type: "tuple",
+        },
+      ],
+      name: "mixedExactInput",
       outputs: [{ internalType: "uint256", name: "amountOut", type: "uint256" }],
       stateMutability: "payable",
       type: "function",
@@ -124,6 +145,36 @@ export async function swap(
 
   const result = await smartRouter.exactInput(params, {
     gasLimit: 1000000,
+    gasPrice: 25000000000,
+  });
+
+  await result.wait();
+
+  return result[0];
+}
+
+export async function mixedSwap(
+  pools: Pool[],
+  recipient: string,
+  tokenIn: string,
+  amountIn: bigint,
+  amountOutMinimum: bigint,
+): Promise<number> {
+  const path = encodeRoute(pools, tokenIn);
+  const flag = pools.map((pool) => (pool.type === DexVersion.V3 ? 0 : 1));
+  const dex = pools.map((pool) => pool.dex);
+
+  const params = {
+    recipient,
+    path,
+    flag,
+    dex,
+    amountIn,
+    amountOutMinimum,
+  };
+
+  const result = await smartRouter.mixedExactInput(params, {
+    gasLimit: 10000000,
     gasPrice: 25000000000,
   });
 
