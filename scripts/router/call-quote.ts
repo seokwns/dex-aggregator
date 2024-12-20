@@ -5,7 +5,7 @@ const provider = new ethers.JsonRpcProvider("https://public-en.node.kaia.io");
 const wallet = new ethers.Wallet(process.env.TEST_3!, provider);
 
 const routeQuoterAddress = "0xA2Ae96A56436a97a2B55eE6a6ce35D023550D878";
-const smartRouterAddress = "0xf666195bd67a0dA429a9B49f7B9C23fbfdE50bb0";
+const smartRouterAddress = "0x9EffF0409E09706D1602ff57174860E616e17317";
 
 const routeQuoter = new ethers.Contract(
   routeQuoterAddress,
@@ -47,7 +47,7 @@ const smartRouter = new ethers.Contract(
             { internalType: "uint256", name: "amountIn", type: "uint256" },
             { internalType: "uint256", name: "amountOutMinimum", type: "uint256" },
           ],
-          internalType: "struct ExactInputParams",
+          internalType: "struct MixedSwapParams",
           name: "params",
           type: "tuple",
         },
