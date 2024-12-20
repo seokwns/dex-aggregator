@@ -400,6 +400,8 @@ contract SmartRouter is ReentrancyGuard, SelfPermit, MulticallExtended {
                 (uint256 reserveInput, uint256 reserveOutput) = input == token0
                     ? (reserve0, reserve1)
                     : (reserve1, reserve0);
+
+                // 그 다음 overflow 가능 장소.
                 amountInput = IERC20(input).balanceOf(address(pair)).sub(reserveInput);
                 // amountOutput = SmartRouterHelper.getAmountOut(amountInput, reserveInput, reserveOutput);
                 amountOutput = getAmountOut(amountInput, reserveInput, reserveOutput);
@@ -414,8 +416,8 @@ contract SmartRouter is ReentrancyGuard, SelfPermit, MulticallExtended {
     }
 
     function swapExactTokensInternal(
+        address payer,
         uint256 amountIn,
-        uint256 amountOutMin,
         address[] memory path,
         uint256[] memory dex,
         address to
@@ -432,9 +434,10 @@ contract SmartRouter is ReentrancyGuard, SelfPermit, MulticallExtended {
 
         pay(
             address(srcToken),
-            hasAlreadyPaid ? address(this) : msg.sender,
+            // hasAlreadyPaid ? address(this) : msg.sender,
+            payer,
             // SmartRouterHelper.pairFor(factoryV2, address(srcToken), path[1]),
-            poolLocator.v2pools(address(srcToken), path[1], dex[1]),
+            poolLocator.v2pools(address(srcToken), path[1], dex[0]),
             amountIn
         );
 
@@ -446,8 +449,8 @@ contract SmartRouter is ReentrancyGuard, SelfPermit, MulticallExtended {
 
         _swap(path, dex, to);
 
+        // subtraction overflow 가 발생할 수 있는 지점
         amountOut = dstToken.balanceOf(to).sub(balanceBefore);
-        require(amountOut >= amountOutMin);
     }
 
     function swapExactTokensForTokens(
@@ -457,7 +460,8 @@ contract SmartRouter is ReentrancyGuard, SelfPermit, MulticallExtended {
         uint256[] calldata dex,
         address to
     ) external payable nonReentrant returns (uint256 amountOut) {
-        amountOut = swapExactTokensInternal(amountIn, amountOutMin, path, dex, to);
+        amountOut = swapExactTokensInternal(msg.sender, amountIn, path, dex, to);
+        require(amountOut >= amountOutMin);
     }
 
     function swapTokensForExactTokens(
@@ -474,7 +478,7 @@ contract SmartRouter is ReentrancyGuard, SelfPermit, MulticallExtended {
         require(amountIn <= amountInMax);
 
         // pay(srcToken, msg.sender, SmartRouterHelper.pairFor(factoryV2, srcToken, path[1]), amountIn);
-        pay(srcToken, msg.sender, poolLocator.v2pools(srcToken, path[1], dex[1]), amountIn);
+        pay(srcToken, msg.sender, poolLocator.v2pools(srcToken, path[1], dex[0]), amountIn);
 
         // find and replace to addresses
         if (to == Constants.MSG_SENDER) to = msg.sender;
@@ -508,7 +512,7 @@ contract SmartRouter is ReentrancyGuard, SelfPermit, MulticallExtended {
         uint256 i = 0;
 
         while (true) {
-            (address tokenIn, address tokenOut, uint24 fee) = params.path.decodeFirstPool();
+            (address tokenIn, address tokenOut, ) = params.path.decodeFirstPool();
             bool hasMultiplePools = params.path.hasMultiplePools();
 
             if (params.flag[i] == 0) {
@@ -529,18 +533,24 @@ contract SmartRouter is ReentrancyGuard, SelfPermit, MulticallExtended {
                 uint256[] memory dexV2 = new uint256[](1);
                 dexV2[0] = params.dex[i];
 
+                // uint256 amountIn,
+                // address[] memory path,
+                // uint256[] memory dex,
+                // address to
                 params.amountIn = swapExactTokensInternal(
+                    payer,
                     params.amountIn,
-                    0,
                     pathV2,
                     dexV2,
                     hasMultiplePools ? address(this) : params.recipient
                 );
+            } else {
+                revert("INVALID_FLAG");
             }
 
             i++;
 
-            if (params.path.hasMultiplePools()) {
+            if (hasMultiplePools) {
                 payer = address(this);
                 params.path = params.path.skipToken();
             } else {
