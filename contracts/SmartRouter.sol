@@ -4,7 +4,6 @@ pragma abicoder v2;
 
 import "@pancakeswap/v3-core/contracts/libraries/SafeCast.sol";
 import "@pancakeswap/v3-core/contracts/libraries/TickMath.sol";
-import "@pancakeswap/v3-core/contracts/libraries/TickBitmap.sol";
 import "@pancakeswap/v3-core/contracts/libraries/LowGasSafeMath.sol";
 import "@pancakeswap/v3-core/contracts/interfaces/IPancakeV3Pool.sol";
 import "@pancakeswap/v3-periphery/contracts/libraries/Path.sol";
@@ -349,7 +348,7 @@ contract SmartRouter is ReentrancyGuard, SelfPermit, MulticallExtended {
     ) public pure returns (uint256 amountOut) {
         require(amountIn > 0, "INSUFFICIENT_INPUT_AMOUNT");
         require(reserveIn > 0 && reserveOut > 0);
-        uint256 amountInWithFee = amountIn.mul(9975);
+        uint256 amountInWithFee = amountIn.mul(997);
         uint256 numerator = amountInWithFee.mul(reserveOut);
         uint256 denominator = reserveIn.mul(10000).add(amountInWithFee);
         amountOut = numerator / denominator;
@@ -364,7 +363,7 @@ contract SmartRouter is ReentrancyGuard, SelfPermit, MulticallExtended {
         require(amountOut > 0, "INSUFFICIENT_OUTPUT_AMOUNT");
         require(reserveIn > 0 && reserveOut > 0);
         uint256 numerator = reserveIn.mul(amountOut).mul(10000);
-        uint256 denominator = reserveOut.sub(amountOut).mul(9975);
+        uint256 denominator = reserveOut.sub(amountOut).mul(997);
         amountIn = (numerator / denominator).add(1);
     }
 
@@ -383,108 +382,49 @@ contract SmartRouter is ReentrancyGuard, SelfPermit, MulticallExtended {
         }
     }
 
-    // supports fee-on-transfer tokens
-    // requires the initial amount to have already been sent to the first pair
-    // `refundETH` should be called at very end of all swaps
-    function _swap(address[] memory path, uint256[] memory dex, address _to) private {
-        for (uint256 i; i < path.length - 1; i++) {
+    function _swapSupportingFeeOnTransferTokens(
+        address[] memory path,
+        uint256[] memory dex,
+        address _to
+    ) internal virtual {
+        for (uint i; i < path.length - 1; i++) {
             (address input, address output) = (path[i], path[i + 1]);
             (address token0, ) = sortTokens(input, output);
-            // IUniswapV2Pair pair = IUniswapV2Pair(SmartRouterHelper.pairFor(factoryV2, input, output));
+            // IUniswapV2Pair pair = IUniswapV2Pair(UniswapV2Library.pairFor(factory, input, output));
             IUniswapV2Pair pair = IUniswapV2Pair(poolLocator.v2pools(input, output, dex[i]));
-            uint256 amountInput;
-            uint256 amountOutput;
-            // scope to avoid stack too deep errors
+            uint amountInput;
+            uint amountOutput;
             {
-                (uint256 reserve0, uint256 reserve1, ) = pair.getReserves();
-                (uint256 reserveInput, uint256 reserveOutput) = input == token0
-                    ? (reserve0, reserve1)
-                    : (reserve1, reserve0);
-
-                // 그 다음 overflow 가능 장소.
+                // scope to avoid stack too deep errors
+                (uint reserve0, uint reserve1, ) = pair.getReserves();
+                (uint reserveInput, uint reserveOutput) = input == token0 ? (reserve0, reserve1) : (reserve1, reserve0);
                 amountInput = IERC20(input).balanceOf(address(pair)).sub(reserveInput);
-                // amountOutput = SmartRouterHelper.getAmountOut(amountInput, reserveInput, reserveOutput);
                 amountOutput = getAmountOut(amountInput, reserveInput, reserveOutput);
             }
-            (uint256 amount0Out, uint256 amount1Out) = input == token0
-                ? (uint256(0), amountOutput)
-                : (amountOutput, uint256(0));
-            // address to = i < path.length - 2 ? SmartRouterHelper.pairFor(factoryV2, output, path[i + 2]) : _to;
-            address to = i < path.length - 2 ? poolLocator.v2pools(input, output, dex[i]) : _to;
+            (uint amount0Out, uint amount1Out) = input == token0 ? (uint(0), amountOutput) : (amountOutput, uint(0));
+            // address to = i < path.length - 2 ? UniswapV2Library.pairFor(factory, output, path[i + 2]) : _to;
+            address to = i < path.length - 2 ? poolLocator.v2pools(output, path[i + 2], dex[i + 1]) : _to;
             pair.swap(amount0Out, amount1Out, to, new bytes(0));
         }
     }
 
-    function swapExactTokensInternal(
+    function swapExactTokensForTokensSupportingFeeOnTransferTokens(
         address payer,
-        uint256 amountIn,
+        uint amountIn,
         address[] memory path,
         uint256[] memory dex,
         address to
     ) internal returns (uint256 amountOut) {
-        IERC20 srcToken = IERC20(path[0]);
-        IERC20 dstToken = IERC20(path[path.length - 1]);
-
-        // use amountIn == Constants.CONTRACT_BALANCE as a flag to swap the entire balance of the contract
-        bool hasAlreadyPaid;
-        if (amountIn == Constants.CONTRACT_BALANCE) {
-            hasAlreadyPaid = true;
-            amountIn = srcToken.balanceOf(address(this));
+        // TransferHelper.safeTransferFrom(path[0], msg.sender, poolLocator.v2pools(path[0], path[1], dex[0]), amountIn);
+        // TransferHelper.safeTransferFrom(path[0], payer, poolLocator.v2pools(path[0], path[1], dex[0]), amountIn);
+        if (payer == address(this)) {
+            TransferHelper.safeTransfer(path[0], poolLocator.v2pools(path[0], path[1], dex[0]), amountIn);
+        } else {
+            TransferHelper.safeTransferFrom(path[0], payer, poolLocator.v2pools(path[0], path[1], dex[0]), amountIn);
         }
-
-        pay(
-            address(srcToken),
-            // hasAlreadyPaid ? address(this) : msg.sender,
-            payer,
-            // SmartRouterHelper.pairFor(factoryV2, address(srcToken), path[1]),
-            poolLocator.v2pools(address(srcToken), path[1], dex[0]),
-            amountIn
-        );
-
-        // find and replace to addresses
-        if (to == Constants.MSG_SENDER) to = msg.sender;
-        else if (to == Constants.ADDRESS_THIS) to = address(this);
-
-        uint256 balanceBefore = dstToken.balanceOf(to);
-
-        _swap(path, dex, to);
-
-        // subtraction overflow 가 발생할 수 있는 지점
-        amountOut = dstToken.balanceOf(to).sub(balanceBefore);
-    }
-
-    function swapExactTokensForTokens(
-        uint256 amountIn,
-        uint256 amountOutMin,
-        address[] calldata path,
-        uint256[] calldata dex,
-        address to
-    ) external payable nonReentrant returns (uint256 amountOut) {
-        amountOut = swapExactTokensInternal(msg.sender, amountIn, path, dex, to);
-        require(amountOut >= amountOutMin);
-    }
-
-    function swapTokensForExactTokens(
-        uint256 amountOut,
-        uint256 amountInMax,
-        address[] calldata path,
-        uint256[] calldata dex,
-        address to
-    ) external payable nonReentrant returns (uint256 amountIn) {
-        address srcToken = path[0];
-
-        // amountIn = SmartRouterHelper.getAmountsIn(factoryV2, amountOut, path)[0];
-        amountIn = getAmountsIn(amountOut, path, dex)[0];
-        require(amountIn <= amountInMax);
-
-        // pay(srcToken, msg.sender, SmartRouterHelper.pairFor(factoryV2, srcToken, path[1]), amountIn);
-        pay(srcToken, msg.sender, poolLocator.v2pools(srcToken, path[1], dex[0]), amountIn);
-
-        // find and replace to addresses
-        if (to == Constants.MSG_SENDER) to = msg.sender;
-        else if (to == Constants.ADDRESS_THIS) to = address(this);
-
-        _swap(path, dex, to);
+        uint balanceBefore = IERC20(path[path.length - 1]).balanceOf(to);
+        _swapSupportingFeeOnTransferTokens(path, dex, to);
+        amountOut = IERC20(path[path.length - 1]).balanceOf(to).sub(balanceBefore);
     }
 
     /************************************************* Router Mixed ***********************************************/
@@ -495,11 +435,25 @@ contract SmartRouter is ReentrancyGuard, SelfPermit, MulticallExtended {
         uint256[] flag;
         uint256[] dex;
         uint256 amountIn;
+    }
+
+    struct MultiPathSwapParams {
+        MixedSwapParams[] paths;
         uint256 amountOutMinimum;
     }
 
+    function multiPathSwap(
+        MultiPathSwapParams memory params
+    ) external payable nonReentrant returns (uint256 amountOut) {
+        for (uint256 i = 0; i < params.paths.length; i++) {
+            amountOut += mixedExactInput(params.paths[i]);
+        }
+
+        require(amountOut >= params.amountOutMinimum, "SmartRouter: INSUFFICIENT_OUTPUT_AMOUNT");
+    }
+
     /// @dev v2, v3 풀을 모두 사용하는 스왑
-    function mixedExactInput(MixedSwapParams memory params) external payable nonReentrant returns (uint256 amountOut) {
+    function mixedExactInput(MixedSwapParams memory params) internal returns (uint256 amountOut) {
         // use amountIn == Constants.CONTRACT_BALANCE as a flag to swap the entire balance of the contract
         bool hasAlreadyPaid;
         if (params.amountIn == Constants.CONTRACT_BALANCE) {
@@ -515,11 +469,13 @@ contract SmartRouter is ReentrancyGuard, SelfPermit, MulticallExtended {
             (address tokenIn, address tokenOut, ) = params.path.decodeFirstPool();
             bool hasMultiplePools = params.path.hasMultiplePools();
 
+            address recipient = hasMultiplePools ? address(this) : params.recipient;
+
             if (params.flag[i] == 0) {
                 // v3 풀 스왑
                 params.amountIn = exactInputInternal(
                     params.amountIn,
-                    hasMultiplePools ? address(this) : params.recipient,
+                    recipient,
                     0,
                     SwapCallbackData({path: params.path.getFirstPool(), payer: payer}),
                     params.dex[i]
@@ -537,12 +493,13 @@ contract SmartRouter is ReentrancyGuard, SelfPermit, MulticallExtended {
                 // address[] memory path,
                 // uint256[] memory dex,
                 // address to
-                params.amountIn = swapExactTokensInternal(
+                // params.amountIn = swapExactTokensInternal(payer, params.amountIn, pathV2, dexV2, recipient);
+                params.amountIn = swapExactTokensForTokensSupportingFeeOnTransferTokens(
                     payer,
                     params.amountIn,
                     pathV2,
                     dexV2,
-                    hasMultiplePools ? address(this) : params.recipient
+                    recipient
                 );
             } else {
                 revert("INVALID_FLAG");
@@ -558,7 +515,5 @@ contract SmartRouter is ReentrancyGuard, SelfPermit, MulticallExtended {
                 break;
             }
         }
-
-        require(amountOut >= params.amountOutMinimum);
     }
 }
