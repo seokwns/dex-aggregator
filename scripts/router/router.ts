@@ -1,8 +1,8 @@
 import { ethers } from "ethers";
 import { readFileSync, writeFileSync } from "fs";
 import { update } from "./pool-data";
-import { DexVersion, Path, Pool, RouteWithQuote, V2Pool, V3Pool } from "./types";
-import { encodeRoute, getAmountOut, mixedSwap, swap } from "./call-quote";
+import { DexVersion, MixedSwapParams, MultiPathSwapParams, Path, Pool, RouteWithQuote, V2Pool, V3Pool } from "./types";
+import { encodeRoute, getAmountOut, multiPathSwap } from "./call-quote";
 
 const replacer = (_key: any, value: { toString: () => any }) => (typeof value === "bigint" ? value.toString() : value);
 
@@ -234,9 +234,9 @@ async function main() {
   // const token0 = "0x19Aac5f612f524B754CA7e7c41cbFa2E981A4432";
   // const token1 = "0x98A8345bB9D3DDa9D808Ca1c9142a28F6b0430E1";
 
-  // WKLAY -> GXA
+  // WKLAY -> WIKEN
   const token0 = "0x19Aac5f612f524B754CA7e7c41cbFa2E981A4432";
-  const token1 = "0xA80e96cCeB1419f9BD9F1c67F7978F51b534A11b";
+  const token1 = "0x275F942985503d8CE9558f8377cC526A3aBa3566";
 
   // BORA -> WETH
   // const token0 = "0x02cbE46fB8A1F579254a9B485788f2D86Cad51aa";
@@ -250,6 +250,7 @@ async function main() {
   // const token0 = "0xF4546E1D3aD590a3c6d178d671b3bc0e8a81e27d";
   // const token1 = "0x3043988Aa54bb3ae4DA60EcB1DC643c630A564F0";
 
+  // 설정
   const amountIn = ethers.parseEther("2");
   const maxHops = 4;
 
@@ -265,10 +266,10 @@ async function main() {
   console.log("routes with quote:", routesWithQuote.length);
   writeFileSync("routes-with-quote.json", JSON.stringify(routesWithQuote, replacer, 2));
 
-  let currency = token0;
   const { paths, amountOut, gasEstimate } = routesWithQuote[0];
   const _path = paths
     .map((path) => {
+      let currency = token0;
       return path.pools
         .map((pool) => {
           const nextCurrency = currency === pool.token0 ? pool.token1 : pool.token0;
@@ -291,40 +292,33 @@ async function main() {
   console.log(`Out: ${amountOut}`);
   console.log(`gas: ${gasEstimate}`);
 
-  // 스왑 호출 전에 approve 필수 approve(pool 주소, 스왑할 token0 수량)
-  // let actualAmountOut = 0;
+  const PRECISION = 10000n;
+  const slippage = 100n;
+  const recipient = "0xF783145cf9cb337e1017EA65C6AFd7d8fdB04e6C";
+  const params: MultiPathSwapParams = {
+    paths: [],
+    amountOutMinimum: BigInt((amountOut * (PRECISION - slippage)) / PRECISION),
+  };
 
-  // for (const path of paths) {
-  //   const { pools, amountIn } = path;
-  //   const out = await swap(
-  //     pools,
-  //     "0xF783145cf9cb337e1017EA65C6AFd7d8fdB04e6C",
-  //     token0,
-  //     amountIn,
-  //     (amountOut * 99n) / 100n,
-  //   );
+  for (const path of paths) {
+    const { pools, amountIn } = path;
+    const encodedPath = encodeRoute(pools, token0);
+    const flag = pools.map((pool) => (pool.type === DexVersion.V3 ? 0 : 1));
+    const dex = pools.map((pool) => pool.dex);
 
-  //   actualAmountOut += out;
-  // }
+    params.paths.push({
+      recipient,
+      path: encodedPath,
+      flag,
+      dex,
+      amountIn,
+    } as MixedSwapParams);
+  }
 
-  // console.log(`Actual out: ${actualAmountOut}`);
+  const out = await multiPathSwap(params);
 
-  // let actualAmountOut = 0;
-
-  // for (const path of paths) {
-  //   const { pools, amountIn } = path;
-  //   const out = await mixedSwap(
-  //     pools,
-  //     "0xF783145cf9cb337e1017EA65C6AFd7d8fdB04e6C",
-  //     token0,
-  //     amountIn,
-  //     (amountOut * 99n) / 100n,
-  //   );
-
-  //   actualAmountOut += out;
-  // }
-
-  // console.log(`Actual out: ${actualAmountOut}`);
+  console.log();
+  console.log(`Actual out: ${out}`);
 }
 
 main().catch((error) => {
