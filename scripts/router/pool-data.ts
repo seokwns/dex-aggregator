@@ -15,13 +15,13 @@ const replacer = (_key: any, value: { toString: () => any }) => (typeof value ==
 
 const v3Dexes = [
   {
-    id: 0,
+    id: 1,
     name: "dragonswap",
     pools: dgPools as unknown as V3Pool[],
     version: DexVersion.V3,
   },
   {
-    id: 1,
+    id: 2,
     name: "klayswap",
     pools: klayPools as unknown as V3Pool[],
     version: DexVersion.V3,
@@ -30,7 +30,7 @@ const v3Dexes = [
 
 const v2Dexes = [
   {
-    id: 2,
+    id: 3,
     name: "neopin",
     pools: neopinPools as unknown as V2Pool[],
     version: DexVersion.V2,
