@@ -70,5 +70,9 @@ export interface MixedSwapParams {
   flag: number[];
   dex: number[];
   amountIn: bigint;
+}
+
+export interface MultiPathSwapParams {
+  paths: MixedSwapParams[];
   amountOutMinimum: bigint;
 }

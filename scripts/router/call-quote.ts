@@ -1,11 +1,11 @@
 import { ethers } from "ethers";
-import { DexVersion, ExactInputParams, Pool, Quote, V2Pool, V3Pool } from "./types";
+import { DexVersion, ExactInputParams, MultiPathSwapParams, Pool, Quote, V2Pool, V3Pool } from "./types";
 
 const provider = new ethers.JsonRpcProvider("https://public-en.node.kaia.io");
 const wallet = new ethers.Wallet(process.env.TEST_3!, provider);
 
-const routeQuoterAddress = "0xA2Ae96A56436a97a2B55eE6a6ce35D023550D878";
-const smartRouterAddress = "0x9EffF0409E09706D1602ff57174860E616e17317";
+const routeQuoterAddress = "0x8e9C6C8ecAdEF3FB04b69490302A62Ea0DDDB946";
+const smartRouterAddress = "0x25F9d9269c110e41911Aebb376b2c62Cf7187120";
 
 const routeQuoter = new ethers.Contract(
   routeQuoterAddress,
@@ -40,20 +40,57 @@ const smartRouter = new ethers.Contract(
       inputs: [
         {
           components: [
-            { internalType: "address", name: "recipient", type: "address" },
-            { internalType: "bytes", name: "path", type: "bytes" },
-            { internalType: "uint256[]", name: "flag", type: "uint256[]" },
-            { internalType: "uint256[]", name: "dex", type: "uint256[]" },
-            { internalType: "uint256", name: "amountIn", type: "uint256" },
-            { internalType: "uint256", name: "amountOutMinimum", type: "uint256" },
+            {
+              components: [
+                {
+                  internalType: "address",
+                  name: "recipient",
+                  type: "address",
+                },
+                {
+                  internalType: "bytes",
+                  name: "path",
+                  type: "bytes",
+                },
+                {
+                  internalType: "uint256[]",
+                  name: "flag",
+                  type: "uint256[]",
+                },
+                {
+                  internalType: "uint256[]",
+                  name: "dex",
+                  type: "uint256[]",
+                },
+                {
+                  internalType: "uint256",
+                  name: "amountIn",
+                  type: "uint256",
+                },
+              ],
+              internalType: "struct SmartRouter.MixedSwapParams[]",
+              name: "paths",
+              type: "tuple[]",
+            },
+            {
+              internalType: "uint256",
+              name: "amountOutMinimum",
+              type: "uint256",
+            },
           ],
-          internalType: "struct MixedSwapParams",
+          internalType: "struct SmartRouter.MultiPathSwapParams",
           name: "params",
           type: "tuple",
         },
       ],
-      name: "mixedExactInput",
-      outputs: [{ internalType: "uint256", name: "amountOut", type: "uint256" }],
+      name: "multiPathSwap",
+      outputs: [
+        {
+          internalType: "uint256",
+          name: "amountOut",
+          type: "uint256",
+        },
+      ],
       stateMutability: "payable",
       type: "function",
     },
@@ -153,32 +190,13 @@ export async function swap(
   return result[0];
 }
 
-export async function mixedSwap(
-  pools: Pool[],
-  recipient: string,
-  tokenIn: string,
-  amountIn: bigint,
-  amountOutMinimum: bigint,
-): Promise<number> {
-  const path = encodeRoute(pools, tokenIn);
-  const flag = pools.map((pool) => (pool.type === DexVersion.V3 ? 0 : 1));
-  const dex = pools.map((pool) => pool.dex);
-
-  const params = {
-    recipient,
-    path,
-    flag,
-    dex,
-    amountIn,
-    amountOutMinimum,
-  };
-
-  const result = await smartRouter.mixedExactInput(params, {
+export async function multiPathSwap(params: MultiPathSwapParams): Promise<number> {
+  const result = await smartRouter.multiPathSwap.staticCall(params, {
     gasLimit: 10000000,
     gasPrice: 25000000000,
   });
 
-  await result.wait();
+  // await result.wait();
 
-  return result[0];
+  return result;
 }
