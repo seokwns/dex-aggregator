@@ -88,31 +88,14 @@ contract SmartRouter is ReentrancyGuard, SelfPermit, MulticallExtended {
     }
 
     function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata _data) external {
-        require(amount0Delta > 0 || amount1Delta > 0); // swaps entirely within 0-liquidity regions are not supported
-        SwapCallbackData memory data = abi.decode(_data, (SwapCallbackData));
-        (address tokenIn, address tokenOut, uint24 fee) = data.path.decodeFirstPool();
-        // CallbackValidation.verifyCallback(factory, tokenIn, tokenOut, fee);
-        poolLocator.verifyPool(tokenIn, tokenOut, fee, msg.sender);
-
-        (bool isExactInput, uint256 amountToPay) = amount0Delta > 0
-            ? (tokenIn < tokenOut, uint256(amount0Delta))
-            : (tokenOut < tokenIn, uint256(amount1Delta));
-        if (isExactInput) {
-            pay(tokenIn, data.payer, msg.sender, amountToPay);
-        } else {
-            // either initiate the next swap or pay
-            if (data.path.hasMultiplePools()) {
-                data.path = data.path.skipToken();
-                exactOutputInternal(amountToPay, msg.sender, 0, data, poolLocator.dexByPool(msg.sender));
-            } else {
-                amountInCached = amountToPay;
-                tokenIn = tokenOut; // swap in/out because exact output swaps are reversed
-                pay(tokenIn, data.payer, msg.sender, amountToPay);
-            }
-        }
+        swapCallbackInternal(amount0Delta, amount1Delta, _data);
     }
 
     function pancakeV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata _data) external {
+        swapCallbackInternal(amount0Delta, amount1Delta, _data);
+    }
+
+    function swapCallbackInternal(int256 amount0Delta, int256 amount1Delta, bytes calldata _data) internal {
         require(amount0Delta > 0 || amount1Delta > 0); // swaps entirely within 0-liquidity regions are not supported
         SwapCallbackData memory data = abi.decode(_data, (SwapCallbackData));
         (address tokenIn, address tokenOut, uint24 fee) = data.path.decodeFirstPool();
@@ -350,7 +333,7 @@ contract SmartRouter is ReentrancyGuard, SelfPermit, MulticallExtended {
         require(reserveIn > 0 && reserveOut > 0);
         uint256 amountInWithFee = amountIn.mul(997);
         uint256 numerator = amountInWithFee.mul(reserveOut);
-        uint256 denominator = reserveIn.mul(10000).add(amountInWithFee);
+        uint256 denominator = reserveIn.mul(1000).add(amountInWithFee);
         amountOut = numerator / denominator;
     }
 
@@ -362,7 +345,7 @@ contract SmartRouter is ReentrancyGuard, SelfPermit, MulticallExtended {
     ) public pure returns (uint256 amountIn) {
         require(amountOut > 0, "INSUFFICIENT_OUTPUT_AMOUNT");
         require(reserveIn > 0 && reserveOut > 0);
-        uint256 numerator = reserveIn.mul(amountOut).mul(10000);
+        uint256 numerator = reserveIn.mul(amountOut).mul(1000);
         uint256 denominator = reserveOut.sub(amountOut).mul(997);
         amountIn = (numerator / denominator).add(1);
     }

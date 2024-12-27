@@ -52,35 +52,14 @@ contract RouteQuoter is ReentrancyGuard {
     }
 
     function pancakeV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes memory path) external view {
-        require(amount0Delta > 0 || amount1Delta > 0); // swaps entirely within 0-liquidity regions are not supported
-        (address tokenIn, address tokenOut, uint24 fee) = path.decodeFirstPool();
-        // SmartRouterHelper.verifyCallback(deployer, tokenIn, tokenOut, fee);
-
-        (bool isExactInput, uint256 amountReceived) = amount0Delta > 0
-            ? (tokenIn < tokenOut, uint256(-amount1Delta))
-            : (tokenOut < tokenIn, uint256(-amount0Delta));
-
-        // IPancakeV3Pool pool = SmartRouterHelper.getPool(deployer, tokenIn, tokenOut, fee);
-        address poolAddress = poolLocator.getV3Pool(tokenIn, tokenOut, fee, msg.sender);
-        require(poolAddress != address(0), "pool not found");
-        IPancakeV3Pool pool = IPancakeV3Pool(poolAddress);
-        (uint160 v3SqrtPriceX96After, int24 tickAfter, , , , , ) = pool.slot0();
-
-        if (isExactInput) {
-            assembly {
-                let ptr := mload(0x40)
-                mstore(ptr, amountReceived)
-                mstore(add(ptr, 0x20), v3SqrtPriceX96After)
-                mstore(add(ptr, 0x40), tickAfter)
-                revert(ptr, 0x60)
-            }
-        } else {
-            /// since we don't support exactOutput, revert here
-            revert("Exact output quote not supported");
-        }
+        swapCallbackInternal(amount0Delta, amount1Delta, path);
     }
 
     function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes memory path) external view {
+        swapCallbackInternal(amount0Delta, amount1Delta, path);
+    }
+
+    function swapCallbackInternal(int256 amount0Delta, int256 amount1Delta, bytes memory path) internal view {
         require(amount0Delta > 0 || amount1Delta > 0); // swaps entirely within 0-liquidity regions are not supported
         (address tokenIn, address tokenOut, uint24 fee) = path.decodeFirstPool();
         // SmartRouterHelper.verifyCallback(deployer, tokenIn, tokenOut, fee);
@@ -165,7 +144,7 @@ contract RouteQuoter is ReentrancyGuard {
         require(reserveIn > 0 && reserveOut > 0);
         uint256 amountInWithFee = amountIn.mul(997);
         uint256 numerator = amountInWithFee.mul(reserveOut);
-        uint256 denominator = reserveIn.mul(10000).add(amountInWithFee);
+        uint256 denominator = reserveIn.mul(1000).add(amountInWithFee);
         amountOut = numerator / denominator;
     }
 

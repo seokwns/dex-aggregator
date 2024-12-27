@@ -105,9 +105,9 @@ function getQuote(pools: Pool[], token0: string, amountIn: bigint): bigint {
 
       if (reserveIn < quote) return 0n;
 
-      const amountInWithFee = quote * 9975n;
+      const amountInWithFee = quote * 997n;
       const numerator = amountInWithFee * BigInt(reserveOut);
-      const denominator = BigInt(reserveIn) * 10000n + amountInWithFee;
+      const denominator = BigInt(reserveIn) * 1000n + amountInWithFee;
 
       quote = numerator / denominator;
       current = current === token0 ? token1 : token0;
@@ -263,7 +263,6 @@ async function main() {
   console.log("candidate routes:", routes.length);
 
   const routesWithQuote = (await getRoutesWithQuote(routes)).sort((a, b) => (a.amountOut > b.amountOut ? -1 : 1));
-  console.log("routes with quote:", routesWithQuote.length);
   writeFileSync("routes-with-quote.json", JSON.stringify(routesWithQuote, replacer, 2));
 
   const { paths, amountOut, gasEstimate } = routesWithQuote[0];
@@ -289,7 +288,7 @@ async function main() {
 
   console.log();
   console.log(`Route: \n${_path}`);
-  console.log(`Out: ${amountOut}`);
+  console.log(`Out: ${ethers.formatEther(amountOut)}`);
   console.log(`gas: ${gasEstimate}`);
 
   const PRECISION = 10000n;
@@ -318,7 +317,7 @@ async function main() {
   const out = await multiPathSwap(params);
 
   console.log();
-  console.log(`Actual out: ${out}`);
+  console.log(`Actual out: ${ethers.formatEther(out)}`);
 }
 
 main().catch((error) => {
