@@ -121,7 +121,7 @@ async function getV2PoolData(): Promise<void> {
       pools[i].token1Decimals = token1Decimals;
 
       pools[i].type = dex.version!.valueOf();
-      pools[i].pairName = `${token0Symbol}-${token1Symbol}`;
+      pools[i].pairName = `${token0Symbol}_${token1Symbol}`;
       pools[i].dex = dex.id;
       pools[i].dexName = dex.name;
       pools[i].kLast = await pool.kLast();
