@@ -1,9 +1,9 @@
 import { ethers } from "ethers";
 import { writeFileSync } from "fs";
-import dgPools from "../../data/dg-pools";
-import klayPools from "../../data/klay-pools";
-import neopinPools from "../../data/neopin-pools";
 import { DexVersion, V2Pool, V3Pool } from "./types";
+import dgPools from "../data/dg-pools";
+import klayPools from "../data/klay-pools";
+import neopinPools from "../data/neopin-pools";
 
 const provider = new ethers.JsonRpcProvider("https://kaia.blockpi.network/v1/rpc/public");
 const tokenAbi = [
@@ -83,7 +83,7 @@ async function getV3PoolData(): Promise<void> {
     }
 
     console.log(`Saving ${pools.length} pools to ${dex.name}-pools.json...`);
-    writeFileSync(`${dex.name}-pools.json`, JSON.stringify(pools, replacer, 2));
+    writeFileSync(`data/contracts/${dex.name}-pools.json`, JSON.stringify(pools, replacer, 2));
   }
 }
 
@@ -128,7 +128,7 @@ async function getV2PoolData(): Promise<void> {
     }
 
     console.log(`Saving ${pools.length} pools to ${dex.name}-pools.json...`);
-    writeFileSync(`${dex.name}-pools.json`, JSON.stringify(pools, replacer, 2));
+    writeFileSync(`data/contracts/${dex.name}-pools.json`, JSON.stringify(pools, replacer, 2));
   }
 }
 
@@ -136,12 +136,3 @@ export async function update(): Promise<void> {
   await getV3PoolData();
   await getV2PoolData();
 }
-
-async function main(): Promise<void> {
-  await update();
-}
-
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});

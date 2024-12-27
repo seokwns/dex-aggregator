@@ -221,10 +221,16 @@ async function getRoutesWithQuote(routes: RouteWithQuote[]): Promise<RouteWithQu
 }
 
 async function main() {
-  // await update();
-  const dbPools: Pool[] = JSON.parse(readFileSync("dragonswap-pools.json", "utf-8")) as unknown as Pool[];
-  const klayswapPools: Pool[] = JSON.parse(readFileSync("klayswap-pools.json", "utf-8")) as unknown as Pool[];
-  const neopinPools: Pool[] = JSON.parse(readFileSync("neopin-pools.json", "utf-8")) as unknown as Pool[];
+  await update();
+  const dbPools: Pool[] = JSON.parse(
+    readFileSync("data/contracts/dragonswap-pools.json", "utf-8"),
+  ) as unknown as Pool[];
+  const klayswapPools: Pool[] = JSON.parse(
+    readFileSync("data/contracts/klayswap-pools.json", "utf-8"),
+  ) as unknown as Pool[];
+  const neopinPools: Pool[] = JSON.parse(
+    readFileSync("data/contracts/neopin-pools.json", "utf-8"),
+  ) as unknown as Pool[];
 
   const pools = [...dbPools, ...klayswapPools, ...neopinPools]
     .filter((pool) => pool.liquidity > 0)
@@ -253,17 +259,19 @@ async function main() {
   // 설정
   const amountIn = ethers.parseEther("2");
   const maxHops = 4;
+  console.log(`amountIn: ${Number(amountIn)}`);
+  console.log(`maxHops: ${+maxHops}`);
 
   const allPaths = findSwapPaths(token0, token1, pools, maxHops);
-  writeFileSync("all-paths.json", JSON.stringify(allPaths, replacer, 2));
+  writeFileSync("data/routes/all-paths.json", JSON.stringify(allPaths, replacer, 2));
   console.log("all paths:", allPaths.length);
 
   const routes = await getCandidateRoutes(token0, token1, amountIn, allPaths);
-  writeFileSync("routes.json", JSON.stringify(routes, replacer, 2));
+  writeFileSync("data/routes/routes.json", JSON.stringify(routes, replacer, 2));
   console.log("candidate routes:", routes.length);
 
   const routesWithQuote = (await getRoutesWithQuote(routes)).sort((a, b) => (a.amountOut > b.amountOut ? -1 : 1));
-  writeFileSync("routes-with-quote.json", JSON.stringify(routesWithQuote, replacer, 2));
+  writeFileSync("data/routes/routes-with-quote.json", JSON.stringify(routesWithQuote, replacer, 2));
 
   const { paths, amountOut, gasEstimate } = routesWithQuote[0];
   const _path = paths
