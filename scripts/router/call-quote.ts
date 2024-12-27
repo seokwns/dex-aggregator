@@ -4,8 +4,8 @@ import { DexVersion, ExactInputParams, MultiPathSwapParams, Pool, Quote, V2Pool,
 const provider = new ethers.JsonRpcProvider("https://public-en.node.kaia.io");
 const wallet = new ethers.Wallet(process.env.TEST_3!, provider);
 
-const routeQuoterAddress = "0x8e9C6C8ecAdEF3FB04b69490302A62Ea0DDDB946";
-const smartRouterAddress = "0x25F9d9269c110e41911Aebb376b2c62Cf7187120";
+const routeQuoterAddress = "0x876599b97CD88B8C95ce5495DBf84a2e6B73eF15";
+const smartRouterAddress = "0xaC8d77Bc5897C65FdC6a657Cc05136b44d4bEfFd";
 
 const routeQuoter = new ethers.Contract(
   routeQuoterAddress,
