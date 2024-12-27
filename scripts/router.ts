@@ -6,6 +6,16 @@ import { encodeRoute, getAmountOut, multiPathSwap } from "./call-quote";
 
 const replacer = (_key: any, value: { toString: () => any }) => (typeof value === "bigint" ? value.toString() : value);
 
+const dbPools: Pool[] = JSON.parse(readFileSync("data/contracts/dragonswap-pools.json", "utf-8")) as unknown as Pool[];
+const klayswapPools: Pool[] = JSON.parse(
+  readFileSync("data/contracts/klayswap-pools.json", "utf-8"),
+) as unknown as Pool[];
+const neopinPools: Pool[] = JSON.parse(readFileSync("data/contracts/neopin-pools.json", "utf-8")) as unknown as Pool[];
+
+const pools = [...dbPools, ...klayswapPools, ...neopinPools]
+  .filter((pool) => pool.liquidity > 0)
+  .sort((a, b) => (a.liquidity > b.liquidity ? -1 : 1));
+
 /**
  * 스왑이 가능한 모든 풀의 경로를 탐색합니다.
  * @param startToken 입력 토큰
@@ -26,26 +36,27 @@ function findSwapPaths(startToken: string, endToken: string, pools: Pool[], maxD
     tokenToPools.get(token1)!.push(pool);
   }
 
-  const queue: [string, string[], Set<Pool>][] = [[startToken, [startToken], new Set()]];
+  const queue: Array<{ token: string; path: string[]; usedPools: Set<Pool> }> = [
+    { token: startToken, path: [startToken], usedPools: new Set() },
+  ];
   const paths: Pool[][] = [];
 
   // BFS 시작
   while (queue.length > 0) {
-    const [currentToken, path, usedPools] = queue.shift()!;
+    const { token: currentToken, path, usedPools } = queue.shift()!;
 
     // 최대 홉(스왑 가능한 횟수) 초과 시 continue
     if (path.length > maxDepth + 1) continue;
 
     // 도착 토큰에 도달 시 경로 저장, 해당 경로 탐색 중지
     if (currentToken === endToken) {
-      paths.push(Array.from(usedPools));
+      paths.push([...usedPools]);
       continue;
     }
 
     // 현재 토큰에서 스왑 가능한 풀 정보 가져오기
     const connectedPools = tokenToPools.get(currentToken) || [];
 
-    // 다음 토큰으로 이동
     for (const pool of connectedPools) {
       // 이미 사용한 풀이면 continue
       if (usedPools.has(pool)) continue;
@@ -58,7 +69,11 @@ function findSwapPaths(startToken: string, endToken: string, pools: Pool[], maxD
       // 다음 토큰, 경로, 사용한 풀 정보 저장
       const newUsedPools = new Set(usedPools);
       newUsedPools.add(pool);
-      queue.push([nextToken, [...path, nextToken], newUsedPools]);
+      queue.push({
+        token: nextToken,
+        path: [...path, nextToken],
+        usedPools: newUsedPools,
+      });
     }
   }
 
@@ -192,12 +207,7 @@ async function getCandidateRoutes(
     }
   });
 
-  const filteredRoutes = routesWithQuote.filter((route) => {
-    const uniquePaths = new Set(route.paths.map((path) => path.pools.join(",")));
-    return uniquePaths.size === route.paths.length;
-  });
-
-  return filteredRoutes.filter((route) => route.percent === 100).sort((a, b) => (a.amountOut > b.amountOut ? -1 : 1));
+  return routesWithQuote.filter((route) => route.percent === 100).sort((a, b) => (a.amountOut > b.amountOut ? -1 : 1));
 }
 
 async function getRoutesWithQuote(routes: RouteWithQuote[]): Promise<RouteWithQuote[]> {
@@ -221,20 +231,7 @@ async function getRoutesWithQuote(routes: RouteWithQuote[]): Promise<RouteWithQu
 }
 
 async function main() {
-  await update();
-  const dbPools: Pool[] = JSON.parse(
-    readFileSync("data/contracts/dragonswap-pools.json", "utf-8"),
-  ) as unknown as Pool[];
-  const klayswapPools: Pool[] = JSON.parse(
-    readFileSync("data/contracts/klayswap-pools.json", "utf-8"),
-  ) as unknown as Pool[];
-  const neopinPools: Pool[] = JSON.parse(
-    readFileSync("data/contracts/neopin-pools.json", "utf-8"),
-  ) as unknown as Pool[];
-
-  const pools = [...dbPools, ...klayswapPools, ...neopinPools]
-    .filter((pool) => pool.liquidity > 0)
-    .sort((a, b) => (a.liquidity > b.liquidity ? -1 : 1));
+  // await update();
 
   // WKLAY -> WETH
   // const token0 = "0x19Aac5f612f524B754CA7e7c41cbFa2E981A4432";
