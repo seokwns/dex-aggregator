@@ -4,7 +4,6 @@ pragma abicoder v2;
 
 import "@pancakeswap/v3-core/contracts/libraries/SafeCast.sol";
 import "@pancakeswap/v3-core/contracts/libraries/TickMath.sol";
-import "@pancakeswap/v3-core/contracts/libraries/TickBitmap.sol";
 import "@pancakeswap/v3-core/contracts/libraries/LowGasSafeMath.sol";
 import "@pancakeswap/v3-core/contracts/interfaces/IPancakeV3Pool.sol";
 import "@pancakeswap/v3-periphery/contracts/libraries/Path.sol";
@@ -60,15 +59,13 @@ contract RouteQuoter is ReentrancyGuard {
     }
 
     function swapCallbackInternal(int256 amount0Delta, int256 amount1Delta, bytes memory path) internal view {
-        require(amount0Delta > 0 || amount1Delta > 0); // swaps entirely within 0-liquidity regions are not supported
+        require(amount0Delta > 0 || amount1Delta > 0);
         (address tokenIn, address tokenOut, uint24 fee) = path.decodeFirstPool();
-        // SmartRouterHelper.verifyCallback(deployer, tokenIn, tokenOut, fee);
 
         (bool isExactInput, uint256 amountReceived) = amount0Delta > 0
             ? (tokenIn < tokenOut, uint256(-amount1Delta))
             : (tokenOut < tokenIn, uint256(-amount0Delta));
 
-        // IPancakeV3Pool pool = SmartRouterHelper.getPool(deployer, tokenIn, tokenOut, fee);
         address poolAddress = poolLocator.getV3Pool(tokenIn, tokenOut, fee, msg.sender);
         require(poolAddress != address(0), "pool not found");
         IPancakeV3Pool pool = IPancakeV3Pool(poolAddress);
@@ -83,7 +80,6 @@ contract RouteQuoter is ReentrancyGuard {
                 revert(ptr, 0x60)
             }
         } else {
-            /// since we don't support exactOutput, revert here
             revert("Exact output quote not supported");
         }
     }
@@ -148,28 +144,12 @@ contract RouteQuoter is ReentrancyGuard {
         amountOut = numerator / denominator;
     }
 
-    /// @dev Fetch an exactIn quote for a V2 pair on chain
     function quoteExactInputSingleV2(
         QuoteExactInputSingleV2Params memory params
     ) public view returns (uint256 amountOut) {
         (uint256 reserveIn, uint256 reserveOut) = getReserves(params.tokenIn, params.tokenOut, params.dex);
         amountOut = getAmountOut(params.amountIn, reserveIn, reserveOut);
     }
-
-    /************************************************** Stable **************************************************/
-
-    /// @dev Fetch an exactIn quote for a Stable pair on chain
-    // function quoteExactInputSingleStable(
-    //     QuoteExactInputSingleStableParams memory params
-    // ) public view returns (uint256 amountOut) {
-    //     (uint256 i, uint256 j, address swapContract) = SmartRouterHelper.getStableInfo(
-    //         factoryStable,
-    //         params.tokenIn,
-    //         params.tokenOut,
-    //         params.flag
-    //     );
-    //     amountOut = IStableSwap(swapContract).get_dy(i, j, params.amountIn);
-    // }
 
     /************************************************** Mixed **************************************************/
 
@@ -191,8 +171,6 @@ contract RouteQuoter is ReentrancyGuard {
     {
         bool zeroForOne = params.tokenIn < params.tokenOut;
 
-        // ICatalistPool pool = SmartRouterHelper.getPool(deployer, params.tokenIn, params.tokenOut, params.fee);
-        // (address token0, address token1) = sortTokens(params);
         IPancakeV3Pool pool = IPancakeV3Pool(
             poolLocator.v3pools(params.tokenIn, params.tokenOut, params.fee, params.dex)
         );
@@ -200,7 +178,7 @@ contract RouteQuoter is ReentrancyGuard {
         uint256 gasBefore = gasleft();
         try
             pool.swap(
-                address(this), // address(0) might cause issues with some tokens
+                address(this),
                 zeroForOne,
                 params.amountIn.toInt256(),
                 params.sqrtPriceLimitX96 == 0
@@ -222,18 +200,7 @@ contract RouteQuoter is ReentrancyGuard {
         uint256[] memory flag,
         uint256[] memory dex,
         uint256 amountIn
-    )
-        public
-        returns (
-            uint256 amountOut,
-            // uint160[] memory v3SqrtPriceX96AfterList,
-            // uint32[] memory v3InitializedTicksCrossedList,
-            uint256 v3SwapGasEstimate
-        )
-    {
-        // v3SqrtPriceX96AfterList = new uint160[](path.numPools());
-        // v3InitializedTicksCrossedList = new uint32[](path.numPools());
-
+    ) public returns (uint256 amountOut, uint256 v3SwapGasEstimate) {
         uint256 i = 0;
         while (true) {
             (address tokenIn, address tokenOut, uint24 fee) = path.decodeFirstPool();
@@ -248,26 +215,16 @@ contract RouteQuoter is ReentrancyGuard {
                     })
                 );
             } else if (flag[i] == 0) {
-                /// the outputs of prior swaps become the inputs to subsequent ones
-                (
-                    uint256 _amountOut,
-                    ,
-                    ,
-                    // uint160 _sqrtPriceX96After,
-                    // uint32 _initializedTicksCrossed,
-                    uint256 _gasEstimate
-                ) = quoteExactInputSingleV3(
-                        QuoteExactInputSingleV3Params({
-                            tokenIn: tokenIn,
-                            tokenOut: tokenOut,
-                            fee: fee,
-                            amountIn: amountIn,
-                            sqrtPriceLimitX96: 0,
-                            dex: dex[i]
-                        })
-                    );
-                // v3SqrtPriceX96AfterList[i] = _sqrtPriceX96After;
-                // v3InitializedTicksCrossedList[i] = _initializedTicksCrossed;
+                (uint256 _amountOut, , , uint256 _gasEstimate) = quoteExactInputSingleV3(
+                    QuoteExactInputSingleV3Params({
+                        tokenIn: tokenIn,
+                        tokenOut: tokenOut,
+                        fee: fee,
+                        amountIn: amountIn,
+                        sqrtPriceLimitX96: 0,
+                        dex: dex[i]
+                    })
+                );
                 v3SwapGasEstimate += _gasEstimate;
                 amountIn = _amountOut;
             } else {
@@ -276,11 +233,9 @@ contract RouteQuoter is ReentrancyGuard {
 
             i++;
 
-            /// decide whether to continue or terminate
             if (path.hasMultiplePools()) {
                 path = path.skipToken();
             } else {
-                // return (amountIn, v3SqrtPriceX96AfterList, v3InitializedTicksCrossedList, v3SwapGasEstimate);
                 return (amountIn, v3SwapGasEstimate);
             }
         }

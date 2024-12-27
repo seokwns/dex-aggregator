@@ -220,8 +220,6 @@ contract SmartRouter is ReentrancyGuard, SelfPermit, MulticallExtended {
         require(amountOut >= params.amountOutMinimum);
     }
 
-    /// @dev Performs a single exact output swap
-    /// @notice `refundETH` should be called at very end of all swaps
     function exactOutputInternal(
         uint256 amountOut,
         address recipient,
@@ -251,26 +249,7 @@ contract SmartRouter is ReentrancyGuard, SelfPermit, MulticallExtended {
         (amountIn, amountOutReceived) = zeroForOne
             ? (uint256(amount0Delta), uint256(-amount1Delta))
             : (uint256(amount1Delta), uint256(-amount0Delta));
-        // it's technically possible to not receive the full output amount,
-        // so if no price limit has been specified, require this possibility away
         if (sqrtPriceLimitX96 == 0) require(amountOutReceived == amountOut);
-    }
-
-    function exactOutputSingle(
-        ExactOutputSingleParams calldata params
-    ) external payable nonReentrant returns (uint256 amountIn) {
-        // avoid an SLOAD by using the swap return data
-        amountIn = exactOutputInternal(
-            params.amountOut,
-            params.recipient,
-            params.sqrtPriceLimitX96,
-            SwapCallbackData({path: abi.encodePacked(params.tokenOut, params.fee, params.tokenIn), payer: msg.sender}),
-            params.dex
-        );
-
-        require(amountIn <= params.amountInMaximum);
-        // has to be reset even though we don't use it in the single hop case
-        amountInCached = DEFAULT_AMOUNT_IN_CACHED;
     }
 
     function exactOutput(ExactOutputParams calldata params) external payable nonReentrant returns (uint256 amountIn) {
