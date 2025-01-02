@@ -164,8 +164,8 @@ async function getCandidateRoutes(
   token1: string,
   amountIn: bigint,
   paths: Pool[][],
+  distributionPercent: number = 5,
 ): Promise<RouteWithQuote[]> {
-  const distributionPercent = 5;
   const [percents, amounts] = getAmountDistribution(amountIn, distributionPercent);
 
   const routesWithQuote = (
@@ -256,6 +256,8 @@ async function main() {
   // 설정
   const amountIn = ethers.parseEther("2");
   const maxHops = 4;
+  const distributionPercent = 1;
+
   console.log(`amountIn: ${Number(amountIn)}`);
   console.log(`maxHops: ${+maxHops}`);
 
@@ -263,7 +265,7 @@ async function main() {
   writeFileSync("data/routes/all-paths.json", JSON.stringify(allPaths, replacer, 2));
   console.log("all paths:", allPaths.length);
 
-  const routes = await getCandidateRoutes(token0, token1, amountIn, allPaths);
+  const routes = await getCandidateRoutes(token0, token1, amountIn, allPaths, distributionPercent);
   writeFileSync("data/routes/routes.json", JSON.stringify(routes, replacer, 2));
   console.log("candidate routes:", routes.length);
 
@@ -289,14 +291,17 @@ async function main() {
         })
         .join("\n -> ");
     })
-    .join("\n");
+    .join("\n\n");
 
   console.log();
   console.log(`Route: \n${_path}`);
   console.log(`Out: ${ethers.formatEther(amountOut)}`);
   console.log(`gas: ${gasEstimate}`);
 
+  // 실제 스왑 실행
   const PRECISION = 10000n;
+
+  // 스왑 설정
   const slippage = 100n;
   const recipient = "0xF783145cf9cb337e1017EA65C6AFd7d8fdB04e6C";
   const params: MultiPathSwapParams = {
