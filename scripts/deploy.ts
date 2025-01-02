@@ -6,7 +6,7 @@ async function main() {
 
   console.log(`PoolLocator deployed to: ${poolLocator.target}`);
 
-  const routeQuoter = await ethers.deployContract("RouteQuoter");
+  const routeQuoter = await ethers.deployContract("RouteQuoter", [poolLocator.target]);
   await routeQuoter.waitForDeployment();
 
   console.log(`RouteQuoter deployed to: ${routeQuoter.target}`);
