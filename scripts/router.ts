@@ -6,16 +6,6 @@ import { encodeRoute, getAmountOut, multiPathSwap } from "./call-quote";
 
 const replacer = (_key: any, value: { toString: () => any }) => (typeof value === "bigint" ? value.toString() : value);
 
-const dbPools: Pool[] = JSON.parse(readFileSync("data/contracts/dragonswap-pools.json", "utf-8")) as unknown as Pool[];
-const klayswapPools: Pool[] = JSON.parse(
-  readFileSync("data/contracts/klayswap-pools.json", "utf-8"),
-) as unknown as Pool[];
-const neopinPools: Pool[] = JSON.parse(readFileSync("data/contracts/neopin-pools.json", "utf-8")) as unknown as Pool[];
-
-const pools = [...dbPools, ...klayswapPools, ...neopinPools]
-  .filter((pool) => pool.liquidity > 0)
-  .sort((a, b) => (a.liquidity > b.liquidity ? -1 : 1));
-
 /**
  * 스왑이 가능한 모든 풀의 경로를 탐색합니다.
  * @param startToken 입력 토큰
@@ -231,7 +221,21 @@ async function getRoutesWithQuote(routes: RouteWithQuote[]): Promise<RouteWithQu
 }
 
 async function main() {
-  // await update();
+  await update();
+
+  const dbPools: Pool[] = JSON.parse(
+    readFileSync("data/contracts/dragonswap-pools.json", "utf-8"),
+  ) as unknown as Pool[];
+  const klayswapPools: Pool[] = JSON.parse(
+    readFileSync("data/contracts/klayswap-pools.json", "utf-8"),
+  ) as unknown as Pool[];
+  const neopinPools: Pool[] = JSON.parse(
+    readFileSync("data/contracts/neopin-pools.json", "utf-8"),
+  ) as unknown as Pool[];
+
+  const pools = [...dbPools, ...klayswapPools, ...neopinPools]
+    .filter((pool) => pool.liquidity > 0)
+    .sort((a, b) => (a.liquidity > b.liquidity ? -1 : 1));
 
   // WKLAY -> WETH
   // const token0 = "0x19Aac5f612f524B754CA7e7c41cbFa2E981A4432";
